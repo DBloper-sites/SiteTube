@@ -441,21 +441,21 @@
 
     // Проверка возможности публикации
     function canPublish() {
-      const lastPublish = getLastPublishTime();
-      if (!lastPublish) return { allowed: true };
-      
-      const now = getCurrentServerTime();
-      const diffMs = now - lastPublish;
-      const oneHourMs = 60 * 60 * 1000;
-      
-      if (diffMs >= oneHourMs) {
-        return { allowed: true };
-      } else {
-        const remainingMs = oneHourMs - diffMs;
-        const minutes = Math.ceil(remainingMs / 60000);
-        return { allowed: false, minutes };
-      }
-    }
+  const lastPublish = getLastPublishTime();
+  if (!lastPublish) return { allowed: true };
+  
+  const now = getCurrentServerTime();
+  const diffMs = now - lastPublish;
+  const fiveMinutesMs = 5 * 60 * 1000; // ← 5 минут
+  
+  if (diffMs >= fiveMinutesMs) {
+    return { allowed: true };
+  } else {
+    const remainingMs = fiveMinutesMs - diffMs;
+    const minutes = Math.ceil(remainingMs / 60000);
+    return { allowed: false, minutes };
+  }
+}
 
     async function loadSitesFromDB() {
       const { data, error } = await supabase.from('sites').select('*').order('created_at', { ascending: false });
