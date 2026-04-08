@@ -19,6 +19,8 @@
       max-width: 500px;
       margin: 0 auto;
       transition: background 0.3s, color 0.3s;
+      --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+      --webview-nav-height: max(0px, var(--safe-area-inset-bottom));
     }
     body.dark { background: #121212; color: #eee; }
     body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item, body.dark .preview-panel {
@@ -30,11 +32,14 @@
       background: #2a2a2a; border-color: #444; color: white;
     }
     
+    @-webkit-keyframes fadeIn { from { opacity: 0; -webkit-transform: scale(0.95); transform: scale(0.95); } to { opacity: 1; -webkit-transform: scale(1); transform: scale(1); } }
     @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @-webkit-keyframes slideInUp { from { -webkit-transform: translateY(20px); transform: translateY(20px); opacity: 0; } to { -webkit-transform: translateY(0); transform: translateY(0); opacity: 1; } }
     @keyframes slideInUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @-webkit-keyframes heartBeat { 0% { -webkit-transform: scale(1); transform: scale(1); } 50% { -webkit-transform: scale(1.3); transform: scale(1.3); } 100% { -webkit-transform: scale(1); transform: scale(1); } }
     @keyframes heartBeat { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
-    .card { animation: fadeIn 0.3s ease-out; }
-    .collection-item { animation: slideInUp 0.2s ease-out; }
+    .card { -webkit-animation: fadeIn 0.3s ease-out; animation: fadeIn 0.3s ease-out; }
+    .collection-item { -webkit-animation: slideInUp 0.2s ease-out; animation: slideInUp 0.2s ease-out; }
     
     header {
       padding: 16px 16px 8px;
@@ -129,6 +134,7 @@
     .action-buttons {
       display: flex; justify-content: center; gap: 20px;
       padding: 16px 20px 24px; flex-shrink: 0;
+      padding-bottom: calc(24px + var(--webview-nav-height));
     }
     .action-btn {
       width: 70px; height: 70px; border-radius: 40px;
@@ -148,10 +154,10 @@
       margin: 0 16px 12px; cursor: pointer;
       box-shadow: 0 8px 20px rgba(0,102,255,0.25); flex-shrink: 0;
       transition: transform 0.15s, box-shadow 0.2s;
+      margin-bottom: calc(12px + var(--webview-nav-height));
     }
     .add-button:active { transform: scale(0.97); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
     
-    /* Панель предпросмотра */
     .preview-panel {
       position: fixed; bottom: 0; left: 0; right: 0; max-width: 500px; margin: 0 auto;
       background: white; border-radius: 28px 28px 0 0;
