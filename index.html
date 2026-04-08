@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Site-Tube</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Звук поп (короткий) -->
+  <audio id="popSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-01.mp3" preload="auto"></audio>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -19,7 +21,7 @@
       transition: background 0.3s, color 0.3s;
     }
     body.dark { background: #121212; color: #eee; }
-    body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item {
+    body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item, body.dark .preview-panel {
       background: #1e1e1e; border-color: #333; color: #eee;
     }
     body.dark .site-title a { color: #4da6ff; }
@@ -88,11 +90,13 @@
     
     .site-preview { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; position: relative; }
     .site-favicon {
-      width: 64px; height: 64px; border-radius: 18px; background: #f0f2f5;
+      width: 80px; height: 80px; border-radius: 20px; background: #f0f2f5;
       display: flex; align-items: center; justify-content: center; overflow: hidden;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s;
+      cursor: pointer;
     }
     .site-favicon img { width: 100%; height: 100%; object-fit: cover; }
+    .site-favicon:active { transform: scale(0.95); }
     .site-title h3 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
     .site-title a { color: #0066ff; text-decoration: none; font-size: 15px; word-break: break-all; }
     .site-description { color: #333; margin: 16px 0; line-height: 1.5; font-size: 16px; }
@@ -123,19 +127,20 @@
     .delete-post-btn:hover { background: #ff3b30; color: white; transform: scale(1.05); }
     
     .action-buttons {
-      display: flex; justify-content: center; gap: 30px;
+      display: flex; justify-content: center; gap: 20px;
       padding: 16px 20px 24px; flex-shrink: 0;
     }
     .action-btn {
       width: 70px; height: 70px; border-radius: 40px;
       background: white; border: none; box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-      font-size: 36px; display: flex; align-items: center; justify-content: center;
+      font-size: 30px; display: flex; align-items: center; justify-content: center;
       cursor: pointer; transition: all 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28);
       border: 1px solid #eee;
     }
     .action-btn:active { transform: scale(0.85); }
     .action-btn.skip { color: #ff3b30; }
     .action-btn.like { color: #34c759; }
+    .action-btn.preview { color: #007aff; font-size: 28px; }
     
     .add-button {
       background: #0066ff; color: white; border: none; border-radius: 60px;
@@ -145,6 +150,41 @@
       transition: transform 0.15s, box-shadow 0.2s;
     }
     .add-button:active { transform: scale(0.97); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
+    
+    /* Панель предпросмотра */
+    .preview-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; max-width: 500px; margin: 0 auto;
+      background: white; border-radius: 28px 28px 0 0;
+      box-shadow: 0 -10px 30px rgba(0,0,0,0.2);
+      transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.4, 1);
+      z-index: 50; height: 80vh; display: flex; flex-direction: column;
+    }
+    .preview-panel.active { transform: translateY(0); }
+    .preview-header {
+      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #eee;
+    }
+    body.dark .preview-header { border-bottom-color: #333; }
+    .preview-title { font-weight: 600; font-size: 18px; }
+    .preview-close {
+      background: none; border: none; font-size: 24px; cursor: pointer;
+      width: 40px; height: 40px; border-radius: 30px; display: flex;
+      align-items: center; justify-content: center; background: #f0f0f0;
+    }
+    body.dark .preview-close { background: #333; color: #eee; }
+    .preview-iframe {
+      flex: 1; width: 100%; border: none;
+    }
+    .preview-actions {
+      padding: 12px 20px; display: flex; gap: 12px; border-top: 1px solid #eee;
+    }
+    body.dark .preview-actions { border-top-color: #333; }
+    .preview-btn {
+      flex: 1; padding: 12px; border-radius: 40px; border: none;
+      font-weight: 600; background: #f0f0f0; cursor: pointer;
+    }
+    .preview-btn.primary { background: #0066ff; color: white; }
+    body.dark .preview-btn { background: #333; color: white; }
     
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -218,11 +258,11 @@
 
 <header>
   <div>
-    <h1>Welcome to Site-Tube</h1>
+    <h1>Site-Tube</h1>
     <div class="subtitle" id="statsSubtitle">Loading...</div>
   </div>
   <div class="top-actions">
-    <button class="icon-btn" id="themeToggle" title="Dark theme">🌙</button>
+    <button class="icon-btn" id="themeToggle" title="Dark mode">🌙</button>
   </div>
 </header>
 
@@ -234,10 +274,11 @@
 
 <div id="discoverContainer" style="display: flex; flex-direction: column; flex: 1;">
   <div class="card-area" id="cardArea">
-    <div class="card" id="currentCard"><div class="loading">Sites loading...</div></div>
+    <div class="card" id="currentCard"><div class="loading">Loading sites...</div></div>
   </div>
   <div class="action-buttons">
     <button class="action-btn skip" id="skipBtn">✕</button>
+    <button class="action-btn preview" id="previewBtn" title="Preview site">👁️</button>
     <button class="action-btn like" id="likeBtn">❤️</button>
   </div>
   <button class="add-button" id="showFormBtn">➕ Add Your Site</button>
@@ -251,6 +292,20 @@
   <div id="profileContent"></div>
 </div>
 
+<!-- Панель предпросмотра -->
+<div class="preview-panel" id="previewPanel">
+  <div class="preview-header">
+    <span class="preview-title" id="previewTitle">Preview</span>
+    <button class="preview-close" id="closePreview">✕</button>
+  </div>
+  <iframe id="previewIframe" class="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
+  <div class="preview-actions">
+    <button class="preview-btn" id="previewLikeBtn">❤️ Like & Open</button>
+    <button class="preview-btn primary" id="previewOpenBtn">Open in new tab</button>
+  </div>
+</div>
+
+<!-- Модалка добавления -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2>Add site</h2>
@@ -273,7 +328,7 @@
     </div>
     <div class="input-group">
       <label>#️⃣ Tags</label>
-      <input type="text" id="siteTags" placeholder="design, news, games">
+      <input type="text" id="siteTags" placeholder="design, news">
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelBtn">Cancel</button>
@@ -286,14 +341,15 @@
   (function(){
     "use strict";
 
-    // ========== SUPABASE CONFIGURATION ==========
+    // ========== КОНФИГУРАЦИЯ SUPABASE ==========
     const SUPABASE_URL = 'https://vkdaybztuugryugmbhku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_G4gFPU_saTc6GL5lCEEOXg_fbvLAUDp';
     // ===========================================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const popSound = document.getElementById('popSound');
 
-    // Local user ID
+    // Локальный ID пользователя
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
       if (!id) {
@@ -304,14 +360,14 @@
     }
     const currentUserId = getLocalUserId();
 
-    // State
+    // Состояние
     let allSites = [];
     let shuffledQueue = [];
     let currentIndex = 0;
     let activeFilterTag = null;
     let currentTab = 'discover';
 
-    // Local storage keys
+    // Локальные хранилища
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
     const STORAGE_LAST_PUBLISH = 'last_publish_time';
@@ -320,19 +376,14 @@
     function saveViewedSet(set) { localStorage.setItem(STORAGE_VIEWED, JSON.stringify([...set])); }
     function getLikedSet() { return new Set(JSON.parse(localStorage.getItem(STORAGE_LIKED) || '[]')); }
     function saveLikedSet(set) { localStorage.setItem(STORAGE_LIKED, JSON.stringify([...set])); }
-    
-    function getLastPublishTime() {
-      const ts = localStorage.getItem(STORAGE_LAST_PUBLISH);
-      return ts ? parseInt(ts) : 0;
-    }
-    function setLastPublishTime(ts) {
-      localStorage.setItem(STORAGE_LAST_PUBLISH, ts);
-    }
+    function getLastPublishTime() { return parseInt(localStorage.getItem(STORAGE_LAST_PUBLISH) || '0'); }
+    function setLastPublishTime(ts) { localStorage.setItem(STORAGE_LAST_PUBLISH, ts); }
 
-    // DOM elements
+    // DOM
     const cardEl = document.getElementById('currentCard');
     const skipBtn = document.getElementById('skipBtn');
     const likeBtn = document.getElementById('likeBtn');
+    const previewBtn = document.getElementById('previewBtn');
     const discoverContainer = document.getElementById('discoverContainer');
     const likedContainer = document.getElementById('likedContainer');
     const profileContainer = document.getElementById('profileContainer');
@@ -341,8 +392,14 @@
     const statsSubtitle = document.getElementById('statsSubtitle');
     const themeToggle = document.getElementById('themeToggle');
     const showFormBtn = document.getElementById('showFormBtn');
+    const previewPanel = document.getElementById('previewPanel');
+    const previewIframe = document.getElementById('previewIframe');
+    const previewTitle = document.getElementById('previewTitle');
+    const closePreview = document.getElementById('closePreview');
+    const previewLikeBtn = document.getElementById('previewLikeBtn');
+    const previewOpenBtn = document.getElementById('previewOpenBtn');
 
-    // Helpers
+    // Вспомогательные
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
@@ -365,6 +422,7 @@
       return date.toLocaleDateString('en-US');
     }
     function vibrate(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
+    function playPop() { popSound.currentTime = 0; popSound.play().catch(()=>{}); }
     function shuffleArray(arr) {
       const a = [...arr];
       for (let i = a.length - 1; i > 0; i--) {
@@ -417,27 +475,6 @@
       if (site) site[field] = newValue;
     }
 
-    // Проверка возможности публикации (исправлено)
-    function canPublish() {
-      const lastPublish = getLastPublishTime();
-      const now = Date.now();
-      
-      if (!lastPublish || lastPublish > now) {
-        return { allowed: true };
-      }
-      
-      const diffMs = now - lastPublish;
-      const limitMs = 5 * 60 * 1000; // 5 минут
-      
-      if (diffMs >= limitMs) {
-        return { allowed: true };
-      } else {
-        const remainingMs = limitMs - diffMs;
-        const minutes = Math.ceil(remainingMs / 60000);
-        return { allowed: false, minutes };
-      }
-    }
-
     async function loadSitesFromDB() {
       const { data, error } = await supabase.from('sites').select('*').order('created_at', { ascending: false });
       if (error) { console.error(error); return; }
@@ -456,9 +493,9 @@
     function renderCurrentCard() {
       const site = getCurrentSite();
       if (!site) {
-        let msg = '😕 No sites';
+        let msg = '😕 No sites yet';
         if (activeFilterTag) msg = `🔎 No sites with tag #${activeFilterTag}`;
-        cardEl.innerHTML = `<div class="empty-message">${msg}<br>Click 'Add Your Site'!</div>`;
+        cardEl.innerHTML = `<div class="empty-message">${msg}<br>Click «Add Your Site»!</div>`;
         return;
       }
 
@@ -473,7 +510,7 @@
       cardEl.innerHTML = `
         ${isOwner ? `<button class="delete-post-btn" data-id="${site.id}">🗑️</button>` : ''}
         <div class="site-preview">
-          <div class="site-favicon">
+          <div class="site-favicon" data-url="${escapeHtml(site.url)}" data-title="${escapeHtml(site.title)}">
             <img src="${imageUrl}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
             <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#e0e0e0; color:#666; font-weight:bold; font-size:28px;">${escapeHtml(site.title?.charAt(0) || '?')}</span>
           </div>
@@ -489,6 +526,13 @@
           <span>👀 ${site.views || 0} · ❤️ ${site.likes || 0} ${isLiked ? '✓' : ''}</span>
         </div>
       `;
+      
+      // Клик по картинке = предпросмотр
+      document.querySelector('.site-favicon').addEventListener('click', () => {
+        const url = site.url;
+        const title = site.title || 'Site';
+        openPreview(url, title);
+      });
       
       document.querySelectorAll('.tag').forEach(el => {
         el.addEventListener('click', (e) => {
@@ -506,10 +550,7 @@
           if (!confirm('Delete this post?')) return;
           const id = delBtn.dataset.id;
           const { error } = await supabase.from('sites').delete().eq('id', id);
-          if (error) {
-            alert('Delete error: ' + error.message);
-            return;
-          }
+          if (error) { alert('Error deleting'); return; }
           allSites = allSites.filter(s => s.id != id);
           removeSiteFromLocal(id);
           rebuildQueue();
@@ -523,6 +564,32 @@
       cardEl.style.transform = '';
     }
 
+    // Предпросмотр
+    function openPreview(url, title) {
+      previewIframe.src = url;
+      previewTitle.textContent = title || 'Preview';
+      previewPanel.classList.add('active');
+    }
+    function closePreviewPanel() {
+      previewPanel.classList.remove('active');
+      previewIframe.src = '';
+    }
+
+    // Действия
+    function handleLike(openInNewTab = true) {
+      const currentSite = getCurrentSite();
+      if (!currentSite) return;
+      
+      if (openInNewTab) {
+        window.open(currentSite.url, '_blank');
+      }
+      incrementCounter(currentSite.id, 'likes');
+      vibrate(10);
+      playPop();
+      showHeartAnimation();
+      updateStatsSubtitle();
+    }
+
     function moveToNext(action) {
       const currentSite = getCurrentSite();
       if (!currentSite) return;
@@ -531,6 +598,7 @@
         window.open(currentSite.url, '_blank');
         incrementCounter(currentSite.id, 'likes');
         vibrate(10);
+        playPop();
         showHeartAnimation();
       } else if (action === 'skip') {
         incrementCounter(currentSite.id, 'skips');
@@ -553,7 +621,7 @@
       setTimeout(() => heart.remove(), 400);
     }
 
-    // Swipe handling
+    // Свайпы
     let startX=0, startY=0, currentX=0, currentY=0, isDragging=false;
     cardEl.addEventListener('touchstart', (e) => {
       if (!getCurrentSite()) return;
@@ -587,8 +655,29 @@
 
     skipBtn.addEventListener('click', () => getCurrentSite() && moveToNext('skip'));
     likeBtn.addEventListener('click', () => getCurrentSite() && moveToNext('like'));
+    previewBtn.addEventListener('click', () => {
+      const site = getCurrentSite();
+      if (site) openPreview(site.url, site.title);
+    });
+    
+    // Панель предпросмотра
+    closePreview.addEventListener('click', closePreviewPanel);
+    previewOpenBtn.addEventListener('click', () => {
+      const site = getCurrentSite();
+      if (site) window.open(site.url, '_blank');
+      closePreviewPanel();
+    });
+    previewLikeBtn.addEventListener('click', () => {
+      const site = getCurrentSite();
+      if (site) {
+        window.open(site.url, '_blank');
+        handleLike(true);
+        closePreviewPanel();
+        moveToNext('like');
+      }
+    });
 
-    // Tabs
+    // Вкладки
     function switchTab(tabId) {
       currentTab = tabId;
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -647,7 +736,7 @@
       `;
     }
 
-    // Modal add site
+    // Модалка добавления (с упрощённым таймером 5 мин)
     const modalOverlay = document.getElementById('modalOverlay');
     const cancelBtn = document.getElementById('cancelBtn');
     const saveBtn = document.getElementById('saveBtn');
@@ -658,10 +747,21 @@
     const descInput = document.getElementById('siteDesc');
     const tagsInput = document.getElementById('siteTags');
 
-    showFormBtn.addEventListener('click', async () => {
+    function canPublish() {
+      const last = getLastPublishTime();
+      if (!last) return { allowed: true };
+      const now = Date.now();
+      const diff = now - last;
+      const fiveMin = 5 * 60 * 1000;
+      if (diff >= fiveMin) return { allowed: true };
+      const left = Math.ceil((fiveMin - diff) / 60000);
+      return { allowed: false, minutes: left };
+    }
+
+    showFormBtn.addEventListener('click', () => {
       const check = canPublish();
       if (!check.allowed) {
-        alert(`⏳ You can add a new site in ${check.minutes} min`);
+        alert(`⏳ You can add a new site in ${check.minutes} min.`);
         return;
       }
       modalOverlay.style.display = 'flex';
@@ -671,7 +771,7 @@
     
     fetchMetaBtn.addEventListener('click', async () => {
       const url = urlInput.value.trim();
-      if (!url) return alert('Enter a link first');
+      if (!url) return alert('Enter link');
       fetchMetaBtn.textContent = '⏳ Loading...';
       try {
         const r = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
@@ -681,20 +781,20 @@
           if (!descInput.value) descInput.value = j.data.description || '';
           if (!imageInput.value) imageInput.value = j.data.image?.url || j.data.logo?.url || '';
         }
-      } catch(e) { alert('Metadata load error'); }
+      } catch(e) { alert('Error fetching metadata'); }
       fetchMetaBtn.textContent = '✨ Auto-fill';
     });
 
     saveBtn.addEventListener('click', async () => {
       const check = canPublish();
       if (!check.allowed) {
-        alert(`⏳ You can add a new site in ${check.minutes} min.`);
+        alert(`⏳ Wait ${check.minutes} min.`);
         modalOverlay.style.display = 'none';
         return;
       }
 
       const url = urlInput.value.trim();
-      if (!url) return alert('Enter a link');
+      if (!url) return alert('Enter link');
       try { new URL(url); } catch { return alert('Invalid URL'); }
       
       const newSite = {
@@ -714,12 +814,11 @@
         if (currentTab==='discover' && !getCurrentSite()) renderCurrentCard();
         updateStatsSubtitle();
       }
-      // Сохраняем время публикации (используем локальное время)
       setLastPublishTime(Date.now());
       modalOverlay.style.display = 'none';
     });
 
-    // Dark theme
+    // Тёмная тема
     function setTheme(dark) {
       document.body.classList.toggle('dark', dark);
       themeToggle.textContent = dark ? '☀️' : '🌙';
