@@ -145,9 +145,6 @@
       transition: transform 0.15s, box-shadow 0.2s;
     }
     .add-button:active { transform: scale(0.97); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
-    .add-button:disabled {
-      opacity: 0.6; transform: none; box-shadow: none; cursor: not-allowed;
-    }
     
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -225,7 +222,7 @@
     <div class="subtitle" id="statsSubtitle">Loading...</div>
   </div>
   <div class="top-actions">
-    <button class="icon-btn" id="themeToggle" title="Тёмная тема">🌙</button>
+    <button class="icon-btn" id="themeToggle" title="Dark theme">🌙</button>
   </div>
 </header>
 
@@ -260,23 +257,23 @@
     <div class="input-group">
       <label>🔗 Link</label>
       <input type="url" id="siteUrl" placeholder="https://example.com" required>
-      <button id="fetchMetaBtn">✨ </button>
+      <button id="fetchMetaBtn">✨ Auto-fill</button>
     </div>
     <div class="input-group">
-      <label>📸 URL</label>
+      <label>📸 Image URL</label>
       <input type="url" id="siteImage" placeholder="https://...">
     </div>
     <div class="input-group">
       <label>📝 Name</label>
-      <input type="text" id="siteTitle" placeholder="Мой крутой сайт" required>
+      <input type="text" id="siteTitle" placeholder="My awesome site" required>
     </div>
     <div class="input-group">
       <label>📄 Description</label>
-      <textarea id="siteDesc" placeholder="О чём этот сайт?"></textarea>
+      <textarea id="siteDesc" placeholder="What's this site about?"></textarea>
     </div>
     <div class="input-group">
-      <label>#️⃣ Tegs</label>
-      <input type="text" id="siteTags" placeholder="дизайн, новости">
+      <label>#️⃣ Tags</label>
+      <input type="text" id="siteTags" placeholder="design, news, games">
     </div>
     <div class="modal-actions">
       <button class="btn-secondary" id="cancelBtn">Cancel</button>
@@ -289,14 +286,14 @@
   (function(){
     "use strict";
 
-    // ========== КОНФИГУРАЦИЯ SUPABASE ==========
+    // ========== SUPABASE CONFIGURATION ==========
     const SUPABASE_URL = 'https://vkdaybztuugryugmbhku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_G4gFPU_saTc6GL5lCEEOXg_fbvLAUDp';
     // ===========================================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Локальный ID пользователя
+    // Local user ID
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
       if (!id) {
@@ -307,16 +304,14 @@
     }
     const currentUserId = getLocalUserId();
 
-    // Состояние
+    // State
     let allSites = [];
     let shuffledQueue = [];
     let currentIndex = 0;
     let activeFilterTag = null;
     let currentTab = 'discover';
-    let lastPublishTime = null;
-    let serverTimeOffset = 0; // разница между локальным и серверным временем
 
-    // Локальные хранилища
+    // Local storage keys
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
     const STORAGE_LAST_PUBLISH = 'last_publish_time';
@@ -334,7 +329,7 @@
       localStorage.setItem(STORAGE_LAST_PUBLISH, ts);
     }
 
-    // DOM
+    // DOM elements
     const cardEl = document.getElementById('currentCard');
     const skipBtn = document.getElementById('skipBtn');
     const likeBtn = document.getElementById('likeBtn');
@@ -347,7 +342,7 @@
     const themeToggle = document.getElementById('themeToggle');
     const showFormBtn = document.getElementById('showFormBtn');
 
-    // Вспомогательные
+    // Helpers
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
@@ -362,12 +357,12 @@
     function formatTimeAgo(dateStr) {
       const date = new Date(dateStr);
       const diffSec = Math.floor((new Date() - date) / 1000);
-      if (diffSec < 60) return 'только что';
+      if (diffSec < 60) return 'just now';
       const diffMin = Math.floor(diffSec / 60);
-      if (diffMin < 60) return `${diffMin} мин. назад`;
+      if (diffMin < 60) return `${diffMin} min ago`;
       const diffHours = Math.floor(diffMin / 60);
-      if (diffHours < 24) return `${diffHours} ч. назад`;
-      return date.toLocaleDateString('ru-RU');
+      if (diffHours < 24) return `${diffHours} h ago`;
+      return date.toLocaleDateString('en-US');
     }
     function vibrate(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
     function shuffleArray(arr) {
@@ -422,40 +417,26 @@
       if (site) site[field] = newValue;
     }
 
-    // Получить серверное время для синхронизации
-    async function syncServerTime() {
-      try {
-        const { data, error } = await supabase.rpc('get_server_time'); // можно использовать любую функцию, но проще запросить текущее время через SQL
-        // Fallback: используем обычный запрос к таблице
-        const { data: timeData } = await supabase.from('sites').select('created_at').limit(1);
-        if (timeData && timeData.length > 0) {
-          const serverDate = new Date(timeData[0].created_at);
-          serverTimeOffset = Date.now() - serverDate.getTime();
-        }
-      } catch (e) {}
-    }
-
-    function getCurrentServerTime() {
-      return Date.now() - serverTimeOffset;
-    }
-
-    // Проверка возможности публикации
+    // Проверка возможности публикации (исправлено)
     function canPublish() {
-  const lastPublish = getLastPublishTime();
-  if (!lastPublish) return { allowed: true };
-  
-  const now = getCurrentServerTime();
-  const diffMs = now - lastPublish;
-  const fiveMinutesMs = 5 * 60 * 1000; // ← 5 минут
-  
-  if (diffMs >= fiveMinutesMs) {
-    return { allowed: true };
-  } else {
-    const remainingMs = fiveMinutesMs - diffMs;
-    const minutes = Math.ceil(remainingMs / 60000);
-    return { allowed: false, minutes };
-  }
-}
+      const lastPublish = getLastPublishTime();
+      const now = Date.now();
+      
+      if (!lastPublish || lastPublish > now) {
+        return { allowed: true };
+      }
+      
+      const diffMs = now - lastPublish;
+      const limitMs = 5 * 60 * 1000; // 5 минут
+      
+      if (diffMs >= limitMs) {
+        return { allowed: true };
+      } else {
+        const remainingMs = limitMs - diffMs;
+        const minutes = Math.ceil(remainingMs / 60000);
+        return { allowed: false, minutes };
+      }
+    }
 
     async function loadSitesFromDB() {
       const { data, error } = await supabase.from('sites').select('*').order('created_at', { ascending: false });
@@ -476,8 +457,8 @@
       const site = getCurrentSite();
       if (!site) {
         let msg = '😕 No sites';
-        if (activeFilterTag) msg = `🔎 No sites with teg #${activeFilterTag}`;
-        cardEl.innerHTML = `<div class="empty-message">${msg}<br>Click 'Add your site'!</div>`;
+        if (activeFilterTag) msg = `🔎 No sites with tag #${activeFilterTag}`;
+        cardEl.innerHTML = `<div class="empty-message">${msg}<br>Click 'Add Your Site'!</div>`;
         return;
       }
 
@@ -522,10 +503,13 @@
       if (delBtn) {
         delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (!confirm('Delete post?')) return;
+          if (!confirm('Delete this post?')) return;
           const id = delBtn.dataset.id;
           const { error } = await supabase.from('sites').delete().eq('id', id);
-          if (error) { alert('Error'); return; }
+          if (error) {
+            alert('Delete error: ' + error.message);
+            return;
+          }
           allSites = allSites.filter(s => s.id != id);
           removeSiteFromLocal(id);
           rebuildQueue();
@@ -569,7 +553,7 @@
       setTimeout(() => heart.remove(), 400);
     }
 
-    // Свайпы
+    // Swipe handling
     let startX=0, startY=0, currentX=0, currentY=0, isDragging=false;
     cardEl.addEventListener('touchstart', (e) => {
       if (!getCurrentSite()) return;
@@ -604,7 +588,7 @@
     skipBtn.addEventListener('click', () => getCurrentSite() && moveToNext('skip'));
     likeBtn.addEventListener('click', () => getCurrentSite() && moveToNext('like'));
 
-    // Вкладки
+    // Tabs
     function switchTab(tabId) {
       currentTab = tabId;
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -621,7 +605,7 @@
       const likedIds = getLikedSet();
       const likedSites = allSites.filter(s => likedIds.has(String(s.id)));
       if (!likedSites.length) {
-        likedList.innerHTML = '<div class="empty-message">💔 No likes</div>';
+        likedList.innerHTML = '<div class="empty-message">💔 No likes yet</div>';
         return;
       }
       likedList.innerHTML = likedSites.map(site => `
@@ -648,7 +632,7 @@
           </div>
         </div>
         <div class="collection-list">
-          ${mySites.length === 0 ? '<div class="empty-message">You don`t have sites yet</div>' : ''}
+          ${mySites.length === 0 ? '<div class="empty-message">You haven`t added any sites yet</div>' : ''}
           ${mySites.map(site => `
             <div class="collection-item">
               <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23ddd%22/%3E%3Ctext x=%2250%22 y=%2250%22 dy=%22.3em%22%3E${site.title?.charAt(0)||'?'}%3C/text%3E%3C/svg%3E'">
@@ -663,7 +647,7 @@
       `;
     }
 
-    // Модалка добавления
+    // Modal add site
     const modalOverlay = document.getElementById('modalOverlay');
     const cancelBtn = document.getElementById('cancelBtn');
     const saveBtn = document.getElementById('saveBtn');
@@ -677,7 +661,7 @@
     showFormBtn.addEventListener('click', async () => {
       const check = canPublish();
       if (!check.allowed) {
-        alert(`⏳ You can add new site in ${check.minutes} min`);
+        alert(`⏳ You can add a new site in ${check.minutes} min`);
         return;
       }
       modalOverlay.style.display = 'flex';
@@ -687,8 +671,8 @@
     
     fetchMetaBtn.addEventListener('click', async () => {
       const url = urlInput.value.trim();
-      if (!url) return alert('Enter link');
-      fetchMetaBtn.textContent = '⏳ Loading..';
+      if (!url) return alert('Enter a link first');
+      fetchMetaBtn.textContent = '⏳ Loading...';
       try {
         const r = await fetch(`https://api.microlink.io?url=${encodeURIComponent(url)}`);
         const j = await r.json();
@@ -697,21 +681,21 @@
           if (!descInput.value) descInput.value = j.data.description || '';
           if (!imageInput.value) imageInput.value = j.data.image?.url || j.data.logo?.url || '';
         }
-      } catch(e) { alert('Error'); }
-      fetchMetaBtn.textContent = '✨';
+      } catch(e) { alert('Metadata load error'); }
+      fetchMetaBtn.textContent = '✨ Auto-fill';
     });
 
     saveBtn.addEventListener('click', async () => {
       const check = canPublish();
       if (!check.allowed) {
-        alert(`⏳ You can add new site in ${check.minutes}  min.`);
+        alert(`⏳ You can add a new site in ${check.minutes} min.`);
         modalOverlay.style.display = 'none';
         return;
       }
 
       const url = urlInput.value.trim();
-      if (!url) return alert('Enter your link');
-      try { new URL(url); } catch { return alert('Wrong URL'); }
+      if (!url) return alert('Enter a link');
+      try { new URL(url); } catch { return alert('Invalid URL'); }
       
       const newSite = {
         user_id: currentUserId,
@@ -730,12 +714,12 @@
         if (currentTab==='discover' && !getCurrentSite()) renderCurrentCard();
         updateStatsSubtitle();
       }
-      // Сохраняем время публикации
-      setLastPublishTime(getCurrentServerTime());
+      // Сохраняем время публикации (используем локальное время)
+      setLastPublishTime(Date.now());
       modalOverlay.style.display = 'none';
     });
 
-    // Тёмная тема
+    // Dark theme
     function setTheme(dark) {
       document.body.classList.toggle('dark', dark);
       themeToggle.textContent = dark ? '☀️' : '🌙';
@@ -752,20 +736,10 @@
       else renderProfile();
     }
 
-    // Инициализация: синхронизируем время и загружаем сайты
+    // Инициализация
     (async () => {
-      await syncServerTime();
       await loadSitesFromDB();
       switchTab('discover');
-      
-      // Проверяем, не истекло ли время последней публикации при загрузке
-      const last = getLastPublishTime();
-      if (last) {
-        const now = getCurrentServerTime();
-        if (now - last < 60 * 60 * 1000) {
-          // Кнопка будет активна, но при клике всё равно проверится
-        }
-      }
     })();
   })();
 </script>
