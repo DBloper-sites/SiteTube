@@ -217,8 +217,7 @@
     }
     body.dark .site-meta { color: #aaa; }
 
-    .delete-post-btn {
-      position: absolute; top: 12px; right: 12px;
+    .delete-post-btn, .delete-site-btn {
       background: rgba(255,255,255,0.9); border: none;
       width: 36px; height: 36px; border-radius: 30px;
       display: flex; align-items: center; justify-content: center;
@@ -226,7 +225,14 @@
       backdrop-filter: blur(4px); box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       transition: all 0.2s; z-index: 5;
     }
-    .delete-post-btn:hover { background: #ff3b30; color: white; transform: scale(1.05); }
+    .delete-post-btn:hover, .delete-site-btn:hover { background: #ff3b30; color: white; transform: scale(1.05); }
+    .delete-post-btn {
+      position: absolute; top: 12px; right: 12px;
+    }
+    .delete-site-btn {
+      background: none; box-shadow: none; backdrop-filter: none; color: #ff3b30; opacity: 0.7;
+    }
+    body.dark .delete-site-btn { background: none; }
 
     .action-buttons {
       display: flex; justify-content: center; gap: 20px;
@@ -450,13 +456,12 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
 
-    // Глобальные подписки (хранятся как объект { [userId]: { followers: Set, following: Set } })
+    // Глобальные подписки
     const GLOBAL_FOLLOWS_KEY = 'global_follows';
     function loadGlobalFollows() {
       const saved = localStorage.getItem(GLOBAL_FOLLOWS_KEY);
       if (!saved) return {};
       const parsed = JSON.parse(saved);
-      // Восстановление Set'ов
       for (const uid in parsed) {
         parsed[uid].followers = new Set(parsed[uid].followers || []);
         parsed[uid].following = new Set(parsed[uid].following || []);
@@ -480,12 +485,10 @@
         globalFollows[userId] = { followers: new Set(), following: new Set() };
       }
     }
-
     function isFollowing(followerId, targetId) {
       ensureUserEntry(followerId);
       return globalFollows[followerId].following.has(targetId);
     }
-
     function toggleFollow(followerId, targetId) {
       if (followerId === targetId) return;
       ensureUserEntry(followerId);
@@ -502,18 +505,16 @@
       }
       saveGlobalFollows(globalFollows);
     }
-
     function getFollowersCount(userId) {
       ensureUserEntry(userId);
       return globalFollows[userId].followers.size;
     }
-
     function getFollowingCount(userId) {
       ensureUserEntry(userId);
       return globalFollows[userId].following.size;
     }
 
-    // Профили пользователей
+    // Профили
     const PROFILES_KEY = 'user_profiles';
     function getAllProfiles() {
       const saved = localStorage.getItem(PROFILES_KEY);
@@ -863,12 +864,7 @@
       
       if (tabId==='discover') renderCurrentCard();
       else if (tabId==='liked') renderLikedList();
-      else if (tabId==='profile') {
-        if (viewingUserId !== currentUserId) {
-          // остаётся просмотр чужого профиля
-        }
-        renderProfile();
-      }
+      else if (tabId==='profile') renderProfile();
       else if (tabId==='analytics') renderAnalytics();
     }
 
@@ -927,6 +923,7 @@
                 <a href="${escapeHtml(site.url)}" target="_blank">${truncateUrl(site.url)}</a>
                 <div>👀 ${site.views||0} · ❤️ ${site.likes||0}</div>
               </div>
+              ${isOwnProfile ? `<button class="delete-site-btn" data-id="${site.id}">🗑️</button>` : ''}
             </div>
           `).join('')}
         </div>
@@ -934,6 +931,23 @@
       
       if (isOwnProfile) {
         document.getElementById('editProfileBtn')?.addEventListener('click', openProfileModal);
+        document.querySelectorAll('.delete-site-btn').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.id;
+            if (!confirm('Delete this site?')) return;
+            const { error } = await supabase.from('sites').delete().eq('id', id);
+            if (error) { alert('Error deleting'); return; }
+            allSites = allSites.filter(s => s.id != id);
+            removeSiteFromLocal(id);
+            rebuildQueue();
+            updateStatsSubtitle();
+            renderProfile();
+            if (currentTab === 'discover') renderCurrentCard();
+            if (currentTab === 'liked') renderLikedList();
+            if (currentTab === 'analytics') renderAnalytics();
+          });
+        });
       } else {
         document.getElementById('profileFollowBtn')?.addEventListener('click', () => {
           toggleFollow(currentUserId, viewingUserId);
@@ -1029,6 +1043,8 @@
       };
       saveProfile(currentUserId, newProfile);
       profileModalOverlay.style.display = 'none';
+      
+      if (currentTab === 'discover') renderCurrentCard();
       if (currentTab === 'profile') renderProfile();
     });
 
