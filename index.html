@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Site-Tube</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <audio id="popSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-01.mp3" preload="auto"></audio>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -22,7 +23,7 @@
       --safe-bottom: max(20px, env(safe-area-inset-bottom));
     }
     body.dark { background: #121212; color: #eee; }
-    body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item, body.dark .preview-panel {
+    body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item {
       background: #1e1e1e; border-color: #333; color: #eee;
     }
     body.dark .site-title a { color: #4da6ff; }
@@ -72,26 +73,39 @@
     body.dark .icon-btn { background: #2a2a2a; color: #eee; }
 
     .tabs {
-      display: flex; padding: 0 16px; gap: 20px;
+      display: flex; padding: 0 8px; gap: 12px;
       border-bottom: 1px solid #ddd; margin-bottom: 8px;
       flex-shrink: 0;
+      overflow-x: auto;
     }
     body.dark .tabs { border-bottom-color: #444; }
     .tab {
-      padding: 8px 0; font-weight: 500; color: #666;
+      padding: 8px 4px; font-weight: 500; color: #666;
       cursor: pointer; border-bottom: 3px solid transparent;
-      transition: all 0.2s;
+      transition: all 0.2s; white-space: nowrap;
     }
     .tab.active { color: #0066ff; border-bottom-color: #0066ff; }
     body.dark .tab { color: #aaa; }
     body.dark .tab.active { color: #4da6ff; }
 
-    #discoverContainer, #likedContainer, #profileContainer {
+    #discoverContainer, #likedContainer, #profileContainer, #analyticsContainer {
       flex: 1;
       min-height: 0;
       display: flex;
       flex-direction: column;
       overflow-y: auto;
+    }
+
+    .search-box {
+      padding: 12px 16px;
+      flex-shrink: 0;
+    }
+    .search-box input {
+      width: 100%; padding: 14px 16px; border: 1.5px solid #ddd;
+      border-radius: 30px; font-size: 16px; background: white;
+    }
+    body.dark .search-box input {
+      background: #2a2a2a; border-color: #444; color: white;
     }
 
     .card-area {
@@ -120,15 +134,71 @@
     }
     .card:active { cursor: grabbing; box-shadow: 0 30px 50px rgba(0,0,0,0.15); }
 
-    .site-preview { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; position: relative; }
-    .site-favicon {
-      width: 80px; height: 80px; border-radius: 20px; background: #f0f2f5;
-      display: flex; align-items: center; justify-content: center; overflow: hidden;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s;
+    .site-image {
+      width: 100%;
+      height: 180px;
+      border-radius: 20px;
+      background: #f0f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .site-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .site-favicon { display: none; }
+
+    .author-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .author-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 20px;
+      background: #0066ff;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      overflow: hidden;
       cursor: pointer;
     }
-    .site-favicon img { width: 100%; height: 100%; object-fit: cover; }
-    .site-favicon:active { transform: scale(0.95); }
+    .author-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .author-info {
+      flex: 1;
+      cursor: pointer;
+    }
+    .author-name {
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .author-stats {
+      font-size: 13px;
+      color: #888;
+    }
+    .follow-btn {
+      background: #f0f0f0;
+      border: none;
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .follow-btn.following {
+      background: #0066ff;
+      color: white;
+    }
+
     .site-title h3 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
     .site-title a { color: #0066ff; text-decoration: none; font-size: 15px; word-break: break-all; }
     .site-description { color: #333; margin: 16px 0; line-height: 1.5; font-size: 16px; }
@@ -166,14 +236,13 @@
     .action-btn {
       width: 70px; height: 70px; border-radius: 40px;
       background: white; border: none; box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-      font-size: 30px; display: flex; align-items: center; justify-content: center;
+      font-size: 36px; display: flex; align-items: center; justify-content: center;
       cursor: pointer; transition: all 0.15s cubic-bezier(0.18, 0.89, 0.32, 1.28);
       border: 1px solid #eee;
     }
     .action-btn:active { transform: scale(0.85); }
     .action-btn.skip { color: #ff3b30; }
     .action-btn.like { color: #34c759; }
-    .action-btn.preview { color: #007aff; font-size: 28px; }
 
     .add-button {
       background: #0066ff; color: white; border: none; border-radius: 60px;
@@ -188,40 +257,6 @@
       flex-shrink: 0;
     }
     .add-button:active { transform: scale(0.97); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
-
-    .preview-panel {
-      position: fixed; bottom: 0; left: 0; right: 0; max-width: 500px; margin: 0 auto;
-      background: white; border-radius: 28px 28px 0 0;
-      box-shadow: 0 -10px 30px rgba(0,0,0,0.2);
-      transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.4, 1);
-      z-index: 50; height: 80vh; display: flex; flex-direction: column;
-    }
-    .preview-panel.active { transform: translateY(0); }
-    .preview-header {
-      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
-      border-bottom: 1px solid #eee;
-    }
-    body.dark .preview-header { border-bottom-color: #333; }
-    .preview-title { font-weight: 600; font-size: 18px; }
-    .preview-close {
-      background: none; border: none; font-size: 24px; cursor: pointer;
-      width: 40px; height: 40px; border-radius: 30px; display: flex;
-      align-items: center; justify-content: center; background: #f0f0f0;
-    }
-    body.dark .preview-close { background: #333; color: #eee; }
-    .preview-iframe {
-      flex: 1; width: 100%; border: none;
-    }
-    .preview-actions {
-      padding: 12px 20px; display: flex; gap: 12px; border-top: 1px solid #eee;
-    }
-    body.dark .preview-actions { border-top-color: #333; }
-    .preview-btn {
-      flex: 1; padding: 12px; border-radius: 40px; border: none;
-      font-weight: 600; background: #f0f0f0; cursor: pointer;
-    }
-    .preview-btn.primary { background: #0066ff; color: white; }
-    body.dark .preview-btn { background: #333; color: white; }
 
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -281,8 +316,21 @@
     .avatar {
       width: 60px; height: 60px; border-radius: 30px; background: #0066ff;
       color: white; display: flex; align-items: center; justify-content: center;
-      font-size: 28px; font-weight: bold;
+      font-size: 28px; font-weight: bold; overflow: hidden;
     }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .profile-edit-btn {
+      margin-left: auto; background: none; border: none;
+      font-size: 24px; cursor: pointer;
+    }
+
+    .analytics-chart-container {
+      padding: 16px;
+      background: white;
+      border-radius: 24px;
+      margin: 16px;
+    }
+    body.dark .analytics-chart-container { background: #1e1e1e; }
 
     .heart-animation {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -305,8 +353,13 @@
 
   <div class="tabs">
     <div class="tab active" data-tab="discover">🔍 Explore</div>
-    <div class="tab" data-tab="liked">❤️ My likes</div>
+    <div class="tab" data-tab="liked">❤️ Likes</div>
     <div class="tab" data-tab="profile">👤 Profile</div>
+    <div class="tab" data-tab="analytics">📊 Analytics</div>
+  </div>
+
+  <div id="searchBox" class="search-box">
+    <input type="text" id="searchInput" placeholder="Search by name or #tag...">
   </div>
 
   <div id="discoverContainer" style="display: flex;">
@@ -315,7 +368,6 @@
     </div>
     <div class="action-buttons">
       <button class="action-btn skip" id="skipBtn">✕</button>
-      <button class="action-btn preview" id="previewBtn" title="Preview site">👁️</button>
       <button class="action-btn like" id="likeBtn">❤️</button>
     </div>
     <button class="add-button" id="showFormBtn">➕ Add Your Site</button>
@@ -328,22 +380,13 @@
   <div id="profileContainer" style="display: none;">
     <div id="profileContent"></div>
   </div>
-</div>
 
-<!-- Панель предпросмотра -->
-<div class="preview-panel" id="previewPanel">
-  <div class="preview-header">
-    <span class="preview-title" id="previewTitle">Preview</span>
-    <button class="preview-close" id="closePreview">✕</button>
-  </div>
-  <iframe id="previewIframe" class="preview-iframe" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>
-  <div class="preview-actions">
-    <button class="preview-btn" id="previewLikeBtn">❤️ Like & Open</button>
-    <button class="preview-btn primary" id="previewOpenBtn">Open in new tab</button>
+  <div id="analyticsContainer" style="display: none;">
+    <div id="analyticsContent"></div>
   </div>
 </div>
 
-<!-- Модалка добавления -->
+<!-- Модалка добавления сайта -->
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal">
     <h2>Add site</h2>
@@ -375,6 +418,26 @@
   </div>
 </div>
 
+<!-- Модалка редактирования профиля -->
+<div class="modal-overlay" id="profileModalOverlay">
+  <div class="modal">
+    <h2>Edit Profile</h2>
+    <div class="input-group">
+      <label>👤 Name</label>
+      <input type="text" id="profileNameInput" placeholder="Your name">
+    </div>
+    <div class="input-group">
+      <label>🖼️ Avatar</label>
+      <input type="file" id="avatarInput" accept="image/*">
+      <div style="margin-top:8px;"><img id="avatarPreview" style="width:60px;height:60px;border-radius:30px;object-fit:cover;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" id="profileCancelBtn">Cancel</button>
+      <button class="btn-primary" id="profileSaveBtn">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
   (function(){
     "use strict";
@@ -386,6 +449,41 @@
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
+
+    // Профили пользователей (локальное хранилище)
+    const PROFILES_KEY = 'user_profiles';
+    function getAllProfiles() {
+      const saved = localStorage.getItem(PROFILES_KEY);
+      return saved ? JSON.parse(saved) : {};
+    }
+    function saveProfile(userId, profile) {
+      const profiles = getAllProfiles();
+      profiles[userId] = profile;
+      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+    }
+    function getProfile(userId) {
+      const profiles = getAllProfiles();
+      return profiles[userId] || { name: 'User', avatar: null };
+    }
+
+    // Подписки
+    const FOLLOWS_KEY = 'user_follows';
+    function getFollowsSet() {
+      const saved = localStorage.getItem(FOLLOWS_KEY);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    }
+    function saveFollowsSet(set) {
+      localStorage.setItem(FOLLOWS_KEY, JSON.stringify([...set]));
+    }
+    function isFollowing(userId) {
+      return getFollowsSet().has(userId);
+    }
+    function toggleFollow(userId) {
+      const set = getFollowsSet();
+      if (set.has(userId)) set.delete(userId);
+      else set.add(userId);
+      saveFollowsSet(set);
+    }
 
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
@@ -402,6 +500,8 @@
     let currentIndex = 0;
     let activeFilterTag = null;
     let currentTab = 'discover';
+    let searchQuery = '';
+    let viewingUserId = currentUserId; // для профиля (чужой или свой)
 
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
@@ -417,21 +517,18 @@
     const cardEl = document.getElementById('currentCard');
     const skipBtn = document.getElementById('skipBtn');
     const likeBtn = document.getElementById('likeBtn');
-    const previewBtn = document.getElementById('previewBtn');
     const discoverContainer = document.getElementById('discoverContainer');
     const likedContainer = document.getElementById('likedContainer');
     const profileContainer = document.getElementById('profileContainer');
+    const analyticsContainer = document.getElementById('analyticsContainer');
     const likedList = document.getElementById('likedList');
     const profileContent = document.getElementById('profileContent');
+    const analyticsContent = document.getElementById('analyticsContent');
     const statsSubtitle = document.getElementById('statsSubtitle');
     const themeToggle = document.getElementById('themeToggle');
     const showFormBtn = document.getElementById('showFormBtn');
-    const previewPanel = document.getElementById('previewPanel');
-    const previewIframe = document.getElementById('previewIframe');
-    const previewTitle = document.getElementById('previewTitle');
-    const closePreview = document.getElementById('closePreview');
-    const previewLikeBtn = document.getElementById('previewLikeBtn');
-    const previewOpenBtn = document.getElementById('previewOpenBtn');
+    const searchBox = document.getElementById('searchBox');
+    const searchInput = document.getElementById('searchInput');
 
     function escapeHtml(text) {
       if (!text) return '';
@@ -466,8 +563,19 @@
     }
 
     function getFilteredSites() {
-      if (!activeFilterTag) return allSites;
-      return allSites.filter(s => s.tags && s.tags.includes(activeFilterTag));
+      let filtered = allSites;
+      if (activeFilterTag) {
+        filtered = filtered.filter(s => s.tags && s.tags.includes(activeFilterTag));
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        filtered = filtered.filter(s => 
+          (s.title || '').toLowerCase().includes(q) ||
+          (s.description || '').toLowerCase().includes(q) ||
+          (s.tags || []).some(t => t.toLowerCase().includes(q))
+        );
+      }
+      return filtered;
     }
 
     function rebuildQueue() {
@@ -520,18 +628,44 @@
       statsSubtitle.textContent = `📊 ${total} sites · ❤️ ${likedCount} likes`;
     }
 
+    function renderAuthorRow(site) {
+      const authorId = site.user_id;
+      const profile = getProfile(authorId);
+      const avatarHtml = profile.avatar ? `<img src="${profile.avatar}">` : (profile.name || '?').charAt(0).toUpperCase();
+      const isOwn = authorId === currentUserId;
+      const following = isOwn ? false : isFollowing(authorId);
+      
+      return `
+        <div class="author-row">
+          <div class="author-avatar" data-user-id="${authorId}">
+            ${avatarHtml}
+          </div>
+          <div class="author-info" data-user-id="${authorId}">
+            <div class="author-name">${escapeHtml(profile.name) || 'User'}</div>
+            <div class="author-stats">👀 ${site.views||0} · ❤️ ${site.likes||0}</div>
+          </div>
+          ${!isOwn ? `
+            <button class="follow-btn ${following ? 'following' : ''}" data-user-id="${authorId}">
+              ${following ? 'Following' : 'Follow'}
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }
+
     function renderCurrentCard() {
       const site = getCurrentSite();
       if (!site) {
-        let msg = '😕 No sites yet';
+        let msg = '😕 No sites found';
         if (activeFilterTag) msg = `🔎 No sites with tag #${activeFilterTag}`;
+        if (searchQuery) msg = '🔍 No matching sites';
         cardEl.innerHTML = `<div class="empty-message">${msg}<br>Click «Add Your Site»!</div>`;
         return;
       }
 
       incrementCounter(site.id, 'views');
 
-      const imageUrl = site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=64`;
+      const imageUrl = site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=256`;
       const tagsHtml = site.tags?.map(t => `<span class="tag" data-tag="${escapeHtml(t)}">#${escapeHtml(t)}</span>`).join('') || '';
       const timeAgo = formatTimeAgo(site.created_at);
       const isLiked = getLikedSet().has(String(site.id));
@@ -539,28 +673,39 @@
 
       cardEl.innerHTML = `
         ${isOwner ? `<button class="delete-post-btn" data-id="${site.id}">🗑️</button>` : ''}
-        <div class="site-preview">
-          <div class="site-favicon" data-url="${escapeHtml(site.url)}" data-title="${escapeHtml(site.title)}">
-            <img src="${imageUrl}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-            <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#e0e0e0; color:#666; font-weight:bold; font-size:28px;">${escapeHtml(site.title?.charAt(0) || '?')}</span>
-          </div>
-          <div class="site-title">
-            <h3>${escapeHtml(site.title) || 'No name'}</h3>
-            <a href="${escapeHtml(site.url)}" target="_blank">${escapeHtml(truncateUrl(site.url))}</a>
-          </div>
+        <div class="site-image">
+          <img src="${imageUrl}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#e0e0e0; color:#666; font-weight:bold; font-size:48px;">${escapeHtml(site.title?.charAt(0) || '?')}</span>
+        </div>
+        ${renderAuthorRow(site)}
+        <div class="site-title">
+          <h3>${escapeHtml(site.title) || 'No name'}</h3>
+          <a href="${escapeHtml(site.url)}" target="_blank">${escapeHtml(truncateUrl(site.url))}</a>
         </div>
         ${site.description ? `<div class="site-description">${escapeHtml(site.description)}</div>` : ''}
         ${tagsHtml ? `<div class="site-tags">${tagsHtml}</div>` : ''}
         <div class="site-meta">
           <span>🕒 ${timeAgo}</span>
-          <span>👀 ${site.views || 0} · ❤️ ${site.likes || 0} ${isLiked ? '✓' : ''}</span>
+          <span>${isLiked ? '❤️' : '🤍'}</span>
         </div>
       `;
       
-      document.querySelector('.site-favicon')?.addEventListener('click', () => {
-        openPreview(site.url, site.title || 'Site');
+      // Обработчики кликов по автору
+      cardEl.querySelectorAll('[data-user-id]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const uid = el.dataset.userId;
+          if (el.classList.contains('follow-btn')) {
+            toggleFollow(uid);
+            renderCurrentCard(); // обновить кнопку
+          } else {
+            // Переход на профиль пользователя
+            viewingUserId = uid;
+            switchTab('profile');
+          }
+        });
       });
-      
+
       document.querySelectorAll('.tag').forEach(el => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
@@ -585,31 +730,11 @@
           renderCurrentCard();
           if (currentTab === 'liked') renderLikedList();
           if (currentTab === 'profile') renderProfile();
+          if (currentTab === 'analytics') renderAnalytics();
         });
       }
 
       cardEl.style.transform = '';
-    }
-
-    function openPreview(url, title) {
-      previewIframe.src = url;
-      previewTitle.textContent = title || 'Preview';
-      previewPanel.classList.add('active');
-    }
-    function closePreviewPanel() {
-      previewPanel.classList.remove('active');
-      previewIframe.src = '';
-    }
-
-    function handleLike(openInNewTab = true) {
-      const currentSite = getCurrentSite();
-      if (!currentSite) return;
-      if (openInNewTab) window.open(currentSite.url, '_blank');
-      incrementCounter(currentSite.id, 'likes');
-      vibrate(10);
-      playPop();
-      showHeartAnimation();
-      updateStatsSubtitle();
     }
 
     function moveToNext(action) {
@@ -673,25 +798,11 @@
 
     skipBtn.addEventListener('click', () => getCurrentSite() && moveToNext('skip'));
     likeBtn.addEventListener('click', () => getCurrentSite() && moveToNext('like'));
-    previewBtn.addEventListener('click', () => {
-      const site = getCurrentSite();
-      if (site) openPreview(site.url, site.title);
-    });
-    
-    closePreview.addEventListener('click', closePreviewPanel);
-    previewOpenBtn.addEventListener('click', () => {
-      const site = getCurrentSite();
-      if (site) window.open(site.url, '_blank');
-      closePreviewPanel();
-    });
-    previewLikeBtn.addEventListener('click', () => {
-      const site = getCurrentSite();
-      if (site) {
-        window.open(site.url, '_blank');
-        handleLike(true);
-        closePreviewPanel();
-        moveToNext('like');
-      }
+
+    searchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      rebuildQueue();
+      renderCurrentCard();
     });
 
     function switchTab(tabId) {
@@ -701,9 +812,19 @@
       discoverContainer.style.display = tabId==='discover'?'flex':'none';
       likedContainer.style.display = tabId==='liked'?'flex':'none';
       profileContainer.style.display = tabId==='profile'?'flex':'none';
+      analyticsContainer.style.display = tabId==='analytics'?'flex':'none';
+      searchBox.style.display = tabId==='discover'?'block':'none';
+      
       if (tabId==='discover') renderCurrentCard();
       else if (tabId==='liked') renderLikedList();
-      else renderProfile();
+      else if (tabId==='profile') {
+        if (viewingUserId !== currentUserId) {
+          // Возвращаем просмотр своего профиля при переключении вкладки
+          viewingUserId = currentUserId;
+        }
+        renderProfile();
+      }
+      else if (tabId==='analytics') renderAnalytics();
     }
 
     function renderLikedList() {
@@ -726,32 +847,141 @@
     }
 
     function renderProfile() {
-  const mySites = allSites.filter(s => s.user_id === currentUserId);
-  const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
-  profileContent.innerHTML = `
-    <div class="profile-header">
-      <div class="avatar">${currentUserId.slice(-2).toUpperCase()}</div>
-      <div>
-        <h3>You</h3>
-        <p>📬 ${mySites.length} sites · ❤️ ${totalLikes} likes</p>
-      </div>
-    </div>
-    <div class="collection-list">
-      ${mySites.length === 0 ? '<div class="empty-message">You haven\'t added any sites yet</div>' : ''}
-      ${mySites.map(site => `
-        <div class="collection-item">
-          <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23ddd%22/%3E%3Ctext x=%2250%22 y=%2250%22 dy=%22.3em%22%3E${site.title?.charAt(0)||'?'}%3C/text%3E%3C/svg%3E'">
-          <div class="collection-info">
-            <h4>${escapeHtml(site.title) || 'No name'}</h4>
-            <a href="${escapeHtml(site.url)}" target="_blank">${truncateUrl(site.url)}</a>
+      const isOwnProfile = viewingUserId === currentUserId;
+      const profile = getProfile(viewingUserId);
+      const userSites = allSites.filter(s => s.user_id === viewingUserId);
+      const totalLikes = userSites.reduce((sum, s) => sum + (s.likes || 0), 0);
+      const followersCount = 0; // можем посчитать из всех профилей
+      const following = isOwnProfile ? false : isFollowing(viewingUserId);
+      
+      profileContent.innerHTML = `
+        <div class="profile-header">
+          <div class="avatar">
+            ${profile.avatar ? `<img src="${profile.avatar}">` : (profile.name || '?').charAt(0).toUpperCase()}
           </div>
-          <span>👀 ${site.views || 0} · ❤️ ${site.likes || 0}</span>
+          <div>
+            <h3>${escapeHtml(profile.name) || 'User'}</h3>
+            <p>📬 ${userSites.length} sites · ❤️ ${totalLikes} likes</p>
+          </div>
+          ${isOwnProfile ? `
+            <button class="profile-edit-btn" id="editProfileBtn">✏️</button>
+          ` : `
+            <button class="follow-btn ${following ? 'following' : ''}" id="profileFollowBtn">
+              ${following ? 'Following' : 'Follow'}
+            </button>
+          `}
         </div>
-      `).join('')}
-    </div>
-  `;
-}
+        <div class="collection-list">
+          ${userSites.length === 0 ? '<div class="empty-message">No sites yet</div>' : ''}
+          ${userSites.map(site => `
+            <div class="collection-item">
+              <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23ddd%22/%3E%3Ctext x=%2250%22 y=%2250%22 dy=%22.3em%22%3E${site.title?.charAt(0)||'?'}%3C/text%3E%3C/svg%3E'">
+              <div class="collection-info">
+                <h4>${escapeHtml(site.title) || 'No name'}</h4>
+                <a href="${escapeHtml(site.url)}" target="_blank">${truncateUrl(site.url)}</a>
+                <div>👀 ${site.views||0} · ❤️ ${site.likes||0}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      
+      if (isOwnProfile) {
+        document.getElementById('editProfileBtn').addEventListener('click', openProfileModal);
+      } else {
+        document.getElementById('profileFollowBtn').addEventListener('click', () => {
+          toggleFollow(viewingUserId);
+          renderProfile();
+        });
+      }
+    }
 
+    let chartInstance = null;
+    function renderAnalytics() {
+      const mySites = allSites.filter(s => s.user_id === currentUserId);
+      const totalViews = mySites.reduce((sum, s) => sum + (s.views || 0), 0);
+      const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
+      
+      const sitesByDate = {};
+      mySites.forEach(site => {
+        const date = new Date(site.created_at).toLocaleDateString();
+        if (!sitesByDate[date]) sitesByDate[date] = { views: 0, likes: 0 };
+        sitesByDate[date].views += site.views || 0;
+        sitesByDate[date].likes += site.likes || 0;
+      });
+      const sortedDates = Object.keys(sitesByDate).sort((a,b) => new Date(a) - new Date(b));
+      
+      analyticsContent.innerHTML = `
+        <div class="profile-header">
+          <div>📊 Total views: ${totalViews} · ❤️ Total likes: ${totalLikes}</div>
+        </div>
+        <div class="analytics-chart-container">
+          <canvas id="analyticsChart" width="400" height="200"></canvas>
+        </div>
+        <div class="collection-list">
+          <h3 style="margin-left:16px;">Your sites performance</h3>
+          ${mySites.sort((a,b) => (b.views||0) - (a.views||0)).map(site => `
+            <div class="collection-item">
+              <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}">
+              <div class="collection-info">
+                <h4>${escapeHtml(site.title) || 'No name'}</h4>
+                <div>👀 ${site.views || 0} · ❤️ ${site.likes || 0}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      const ctx = document.getElementById('analyticsChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: sortedDates,
+          datasets: [
+            { label: 'Views', data: sortedDates.map(d => sitesByDate[d].views), borderColor: '#0066ff', tension: 0.2 },
+            { label: 'Likes', data: sortedDates.map(d => sitesByDate[d].likes), borderColor: '#34c759', tension: 0.2 }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: true }
+      });
+    }
+
+    // Модалка профиля
+    const profileModalOverlay = document.getElementById('profileModalOverlay');
+    const profileNameInput = document.getElementById('profileNameInput');
+    const avatarInput = document.getElementById('avatarInput');
+    const avatarPreview = document.getElementById('avatarPreview');
+    const profileCancelBtn = document.getElementById('profileCancelBtn');
+    const profileSaveBtn = document.getElementById('profileSaveBtn');
+
+    function openProfileModal() {
+      const profile = getProfile(currentUserId);
+      profileNameInput.value = profile.name || '';
+      if (profile.avatar) avatarPreview.src = profile.avatar;
+      else avatarPreview.src = '';
+      profileModalOverlay.style.display = 'flex';
+    }
+    avatarInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => avatarPreview.src = ev.target.result;
+        reader.readAsDataURL(file);
+      }
+    });
+    profileCancelBtn.addEventListener('click', () => profileModalOverlay.style.display = 'none');
+    profileSaveBtn.addEventListener('click', () => {
+      const newProfile = {
+        name: profileNameInput.value.trim() || 'You',
+        avatar: avatarPreview.src || null
+      };
+      saveProfile(currentUserId, newProfile);
+      profileModalOverlay.style.display = 'none';
+      if (currentTab === 'profile') renderProfile();
+    });
+
+    // Модалка добавления сайта
     const modalOverlay = document.getElementById('modalOverlay');
     const cancelBtn = document.getElementById('cancelBtn');
     const saveBtn = document.getElementById('saveBtn');
@@ -841,7 +1071,8 @@
     function renderCurrentView() {
       if (currentTab==='discover') renderCurrentCard();
       else if (currentTab==='liked') renderLikedList();
-      else renderProfile();
+      else if (currentTab==='profile') renderProfile();
+      else if (currentTab==='analytics') renderAnalytics();
     }
 
     (async () => {
