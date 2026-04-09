@@ -5,22 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Site-Tube</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- Звук поп (короткий) -->
   <audio id="popSound" src="https://www.soundjay.com/misc/sounds/bell-ringing-01.mp3" preload="auto"></audio>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; width: 100%; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
       background: #f5f5f7;
-      height: 100vh;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
       max-width: 500px;
       margin: 0 auto;
       transition: background 0.3s, color 0.3s;
-      --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
-      --webview-nav-height: max(0px, var(--safe-area-inset-bottom));
+      min-height: -webkit-fill-available;
+      height: -webkit-fill-available;
+      --safe-bottom: max(20px, env(safe-area-inset-bottom));
     }
     body.dark { background: #121212; color: #eee; }
     body.dark .card, body.dark .modal, body.dark .action-btn, body.dark .add-button, body.dark .collection-item, body.dark .preview-panel {
@@ -31,7 +30,7 @@
     body.dark .input-group input, body.dark .input-group textarea {
       background: #2a2a2a; border-color: #444; color: white;
     }
-    
+
     @-webkit-keyframes fadeIn { from { opacity: 0; -webkit-transform: scale(0.95); transform: scale(0.95); } to { opacity: 1; -webkit-transform: scale(1); transform: scale(1); } }
     @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     @-webkit-keyframes slideInUp { from { -webkit-transform: translateY(20px); transform: translateY(20px); opacity: 0; } to { -webkit-transform: translateY(0); transform: translateY(0); opacity: 1; } }
@@ -40,7 +39,15 @@
     @keyframes heartBeat { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }
     .card { -webkit-animation: fadeIn 0.3s ease-out; animation: fadeIn 0.3s ease-out; }
     .collection-item { -webkit-animation: slideInUp 0.2s ease-out; animation: slideInUp 0.2s ease-out; }
-    
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      height: 100%;
+    }
+
     header {
       padding: 16px 16px 8px;
       flex-shrink: 0;
@@ -52,7 +59,7 @@
     body.dark h1 { color: #fff; }
     .subtitle { color: #666; font-size: 15px; margin-top: 4px; }
     body.dark .subtitle { color: #aaa; }
-    
+
     .top-actions { display: flex; gap: 12px; }
     .icon-btn {
       background: none; border: none; font-size: 24px; cursor: pointer;
@@ -63,10 +70,11 @@
     }
     .icon-btn:active { transform: scale(0.9); }
     body.dark .icon-btn { background: #2a2a2a; color: #eee; }
-    
+
     .tabs {
       display: flex; padding: 0 16px; gap: 20px;
       border-bottom: 1px solid #ddd; margin-bottom: 8px;
+      flex-shrink: 0;
     }
     body.dark .tabs { border-bottom-color: #444; }
     .tab {
@@ -77,22 +85,41 @@
     .tab.active { color: #0066ff; border-bottom-color: #0066ff; }
     body.dark .tab { color: #aaa; }
     body.dark .tab.active { color: #4da6ff; }
-    
+
+    #discoverContainer, #likedContainer, #profileContainer {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
     .card-area {
-      flex: 1; position: relative; display: flex;
-      align-items: center; justify-content: center;
-      padding: 8px 12px; touch-action: pan-y;
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      touch-action: pan-y;
     }
     .card {
-      position: absolute; width: 100%; max-width: 400px;
-      background: white; border-radius: 32px;
+      position: absolute;
+      width: 100%;
+      max-width: 400px;
+      background: white;
+      border-radius: 32px;
       box-shadow: 0 20px 40px rgba(0,0,0,0.08), 0 6px 12px rgba(0,0,0,0.05);
-      padding: 20px; transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.4, 1), box-shadow 0.2s;
-      will-change: transform; border: 1px solid rgba(0,0,0,0.04);
-      touch-action: none; user-select: none; cursor: grab;
+      padding: 20px;
+      transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.4, 1), box-shadow 0.2s;
+      will-change: transform;
+      border: 1px solid rgba(0,0,0,0.04);
+      touch-action: none;
+      user-select: none;
+      cursor: grab;
     }
     .card:active { cursor: grabbing; box-shadow: 0 30px 50px rgba(0,0,0,0.15); }
-    
+
     .site-preview { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; position: relative; }
     .site-favicon {
       width: 80px; height: 80px; border-radius: 20px; background: #f0f2f5;
@@ -113,13 +140,13 @@
     }
     .tag:hover { background: #e0e4e8; transform: scale(0.97); }
     body.dark .tag:hover { background: #444; }
-    
+
     .site-meta {
       display: flex; justify-content: space-between; align-items: center;
       margin-top: 16px; color: #888; font-size: 13px;
     }
     body.dark .site-meta { color: #aaa; }
-    
+
     .delete-post-btn {
       position: absolute; top: 12px; right: 12px;
       background: rgba(255,255,255,0.9); border: none;
@@ -130,11 +157,11 @@
       transition: all 0.2s; z-index: 5;
     }
     .delete-post-btn:hover { background: #ff3b30; color: white; transform: scale(1.05); }
-    
+
     .action-buttons {
       display: flex; justify-content: center; gap: 20px;
       padding: 16px 20px 24px; flex-shrink: 0;
-      padding-bottom: calc(24px + var(--webview-nav-height));
+      padding-bottom: calc(24px + var(--safe-bottom));
     }
     .action-btn {
       width: 70px; height: 70px; border-radius: 40px;
@@ -147,17 +174,21 @@
     .action-btn.skip { color: #ff3b30; }
     .action-btn.like { color: #34c759; }
     .action-btn.preview { color: #007aff; font-size: 28px; }
-    
+
     .add-button {
       background: #0066ff; color: white; border: none; border-radius: 60px;
       padding: 14px 20px; font-size: 17px; font-weight: 600;
-      margin: 0 16px 12px; cursor: pointer;
-      box-shadow: 0 8px 20px rgba(0,102,255,0.25); flex-shrink: 0;
+      margin: 0 16px 0; cursor: pointer;
+      box-shadow: 0 8px 20px rgba(0,102,255,0.25);
       transition: transform 0.15s, box-shadow 0.2s;
-      margin-bottom: calc(12px + var(--webview-nav-height));
+      margin-bottom: calc(12px + var(--safe-bottom));
+      position: sticky;
+      bottom: 0;
+      z-index: 10;
+      flex-shrink: 0;
     }
     .add-button:active { transform: scale(0.97); box-shadow: 0 4px 12px rgba(0,102,255,0.3); }
-    
+
     .preview-panel {
       position: fixed; bottom: 0; left: 0; right: 0; max-width: 500px; margin: 0 auto;
       background: white; border-radius: 28px 28px 0 0;
@@ -191,7 +222,7 @@
     }
     .preview-btn.primary { background: #0066ff; color: white; }
     body.dark .preview-btn { background: #333; color: white; }
-    
+
     .modal-overlay {
       position: fixed; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(0,0,0,0.5); display: none;
@@ -224,11 +255,11 @@
     .modal-actions button { flex:1; padding:16px; border-radius:60px; border:none; font-weight:600; }
     .btn-primary { background:#0066ff; color:white; }
     .btn-secondary { background:#f0f0f0; color:#333; }
-    
+
     .loading { text-align: center; padding: 20px; color: #666; }
     .empty-message { text-align: center; color: #666; font-size: 18px; padding: 40px; }
     body.dark .empty-message { color: #aaa; }
-    
+
     .collection-list { padding: 16px; overflow-y: auto; flex: 1; }
     .collection-item {
       background: white; border-radius: 20px; padding: 16px; margin-bottom: 12px;
@@ -241,7 +272,7 @@
     .collection-info { flex: 1; }
     .collection-info h4 { font-size: 18px; margin-bottom: 4px; }
     .collection-info a { color: #0066ff; font-size: 14px; }
-    
+
     .profile-header {
       padding: 16px; background: white; border-radius: 24px;
       margin: 8px 16px; display: flex; align-items: center; gap: 16px;
@@ -252,7 +283,7 @@
       color: white; display: flex; align-items: center; justify-content: center;
       font-size: 28px; font-weight: bold;
     }
-    
+
     .heart-animation {
       position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
       font-size: 100px; color: #ff3b30; pointer-events: none; z-index: 200;
@@ -261,41 +292,42 @@
   </style>
 </head>
 <body class="light">
+<div id="app">
+  <header>
+    <div>
+      <h1>Site-Tube</h1>
+      <div class="subtitle" id="statsSubtitle">Loading...</div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="themeToggle" title="Dark mode">🌙</button>
+    </div>
+  </header>
 
-<header>
-  <div>
-    <h1>Site-Tube</h1>
-    <div class="subtitle" id="statsSubtitle">Loading...</div>
+  <div class="tabs">
+    <div class="tab active" data-tab="discover">🔍 Explore</div>
+    <div class="tab" data-tab="liked">❤️ My likes</div>
+    <div class="tab" data-tab="profile">👤 Profile</div>
   </div>
-  <div class="top-actions">
-    <button class="icon-btn" id="themeToggle" title="Dark mode">🌙</button>
+
+  <div id="discoverContainer" style="display: flex;">
+    <div class="card-area" id="cardArea">
+      <div class="card" id="currentCard"><div class="loading">Loading sites...</div></div>
+    </div>
+    <div class="action-buttons">
+      <button class="action-btn skip" id="skipBtn">✕</button>
+      <button class="action-btn preview" id="previewBtn" title="Preview site">👁️</button>
+      <button class="action-btn like" id="likeBtn">❤️</button>
+    </div>
+    <button class="add-button" id="showFormBtn">➕ Add Your Site</button>
   </div>
-</header>
 
-<div class="tabs">
-  <div class="tab active" data-tab="discover">🔍 Explore</div>
-  <div class="tab" data-tab="liked">❤️ My likes</div>
-  <div class="tab" data-tab="profile">👤 Profile</div>
-</div>
-
-<div id="discoverContainer" style="display: flex; flex-direction: column; flex: 1;">
-  <div class="card-area" id="cardArea">
-    <div class="card" id="currentCard"><div class="loading">Loading sites...</div></div>
+  <div id="likedContainer" style="display: none;">
+    <div class="collection-list" id="likedList"></div>
   </div>
-  <div class="action-buttons">
-    <button class="action-btn skip" id="skipBtn">✕</button>
-    <button class="action-btn preview" id="previewBtn" title="Preview site">👁️</button>
-    <button class="action-btn like" id="likeBtn">❤️</button>
+
+  <div id="profileContainer" style="display: none;">
+    <div id="profileContent"></div>
   </div>
-  <button class="add-button" id="showFormBtn">➕ Add Your Site</button>
-</div>
-
-<div id="likedContainer" style="display: none; flex: 1; flex-direction: column;">
-  <div class="collection-list" id="likedList"></div>
-</div>
-
-<div id="profileContainer" style="display: none; flex: 1; flex-direction: column; overflow-y: auto;">
-  <div id="profileContent"></div>
 </div>
 
 <!-- Панель предпросмотра -->
@@ -347,15 +379,14 @@
   (function(){
     "use strict";
 
-    // ========== КОНФИГУРАЦИЯ SUPABASE ==========
+    // ========== ВАШИ КЛЮЧИ SUPABASE ==========
     const SUPABASE_URL = 'https://vkdaybztuugryugmbhku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_G4gFPU_saTc6GL5lCEEOXg_fbvLAUDp';
-    // ===========================================
+    // ========================================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
 
-    // Локальный ID пользователя
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
       if (!id) {
@@ -366,14 +397,12 @@
     }
     const currentUserId = getLocalUserId();
 
-    // Состояние
     let allSites = [];
     let shuffledQueue = [];
     let currentIndex = 0;
     let activeFilterTag = null;
     let currentTab = 'discover';
 
-    // Локальные хранилища
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
     const STORAGE_LAST_PUBLISH = 'last_publish_time';
@@ -385,7 +414,6 @@
     function getLastPublishTime() { return parseInt(localStorage.getItem(STORAGE_LAST_PUBLISH) || '0'); }
     function setLastPublishTime(ts) { localStorage.setItem(STORAGE_LAST_PUBLISH, ts); }
 
-    // DOM
     const cardEl = document.getElementById('currentCard');
     const skipBtn = document.getElementById('skipBtn');
     const likeBtn = document.getElementById('likeBtn');
@@ -405,7 +433,6 @@
     const previewLikeBtn = document.getElementById('previewLikeBtn');
     const previewOpenBtn = document.getElementById('previewOpenBtn');
 
-    // Вспомогательные
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
@@ -464,7 +491,6 @@
       if (!siteId) return;
       const viewedSet = getViewedSet();
       const likedSet = getLikedSet();
-      
       if (field === 'views') {
         if (viewedSet.has(String(siteId))) return;
         viewedSet.add(String(siteId)); saveViewedSet(viewedSet);
@@ -472,11 +498,9 @@
         if (likedSet.has(String(siteId))) return;
         likedSet.add(String(siteId)); saveLikedSet(likedSet);
       }
-      
       const { data } = await supabase.from('sites').select(field).eq('id', siteId).single();
       const newValue = (data?.[field] || 0) + 1;
       await supabase.from('sites').update({ [field]: newValue }).eq('id', siteId);
-      
       const site = allSites.find(s => s.id === siteId);
       if (site) site[field] = newValue;
     }
@@ -533,11 +557,8 @@
         </div>
       `;
       
-      // Клик по картинке = предпросмотр
-      document.querySelector('.site-favicon').addEventListener('click', () => {
-        const url = site.url;
-        const title = site.title || 'Site';
-        openPreview(url, title);
+      document.querySelector('.site-favicon')?.addEventListener('click', () => {
+        openPreview(site.url, site.title || 'Site');
       });
       
       document.querySelectorAll('.tag').forEach(el => {
@@ -570,7 +591,6 @@
       cardEl.style.transform = '';
     }
 
-    // Предпросмотр
     function openPreview(url, title) {
       previewIframe.src = url;
       previewTitle.textContent = title || 'Preview';
@@ -581,14 +601,10 @@
       previewIframe.src = '';
     }
 
-    // Действия
     function handleLike(openInNewTab = true) {
       const currentSite = getCurrentSite();
       if (!currentSite) return;
-      
-      if (openInNewTab) {
-        window.open(currentSite.url, '_blank');
-      }
+      if (openInNewTab) window.open(currentSite.url, '_blank');
       incrementCounter(currentSite.id, 'likes');
       vibrate(10);
       playPop();
@@ -599,7 +615,6 @@
     function moveToNext(action) {
       const currentSite = getCurrentSite();
       if (!currentSite) return;
-
       if (action === 'like') {
         window.open(currentSite.url, '_blank');
         incrementCounter(currentSite.id, 'likes');
@@ -610,11 +625,9 @@
         incrementCounter(currentSite.id, 'skips');
         vibrate([5, 10, 5]);
       }
-
       if (shuffledQueue.length <= 1) rebuildQueue();
       else if (currentIndex >= shuffledQueue.length - 1) rebuildQueue();
       else currentIndex++;
-      
       renderCurrentCard();
       updateStatsSubtitle();
     }
@@ -627,7 +640,6 @@
       setTimeout(() => heart.remove(), 400);
     }
 
-    // Свайпы
     let startX=0, startY=0, currentX=0, currentY=0, isDragging=false;
     cardEl.addEventListener('touchstart', (e) => {
       if (!getCurrentSite()) return;
@@ -666,7 +678,6 @@
       if (site) openPreview(site.url, site.title);
     });
     
-    // Панель предпросмотра
     closePreview.addEventListener('click', closePreviewPanel);
     previewOpenBtn.addEventListener('click', () => {
       const site = getCurrentSite();
@@ -683,7 +694,6 @@
       }
     });
 
-    // Вкладки
     function switchTab(tabId) {
       currentTab = tabId;
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -716,33 +726,32 @@
     }
 
     function renderProfile() {
-      const mySites = allSites.filter(s => s.user_id === currentUserId);
-      const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
-      profileContent.innerHTML = `
-        <div class="profile-header">
-          <div class="avatar">${currentUserId.slice(-2).toUpperCase()}</div>
-          <div>
-            <h3>You</h3>
-            <p>📬 ${mySites.length} sites · ❤️ ${totalLikes} likes</p>
+  const mySites = allSites.filter(s => s.user_id === currentUserId);
+  const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
+  profileContent.innerHTML = `
+    <div class="profile-header">
+      <div class="avatar">${currentUserId.slice(-2).toUpperCase()}</div>
+      <div>
+        <h3>You</h3>
+        <p>📬 ${mySites.length} sites · ❤️ ${totalLikes} likes</p>
+      </div>
+    </div>
+    <div class="collection-list">
+      ${mySites.length === 0 ? '<div class="empty-message">You haven\'t added any sites yet</div>' : ''}
+      ${mySites.map(site => `
+        <div class="collection-item">
+          <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23ddd%22/%3E%3Ctext x=%2250%22 y=%2250%22 dy=%22.3em%22%3E${site.title?.charAt(0)||'?'}%3C/text%3E%3C/svg%3E'">
+          <div class="collection-info">
+            <h4>${escapeHtml(site.title) || 'No name'}</h4>
+            <a href="${escapeHtml(site.url)}" target="_blank">${truncateUrl(site.url)}</a>
           </div>
+          <span>👀 ${site.views || 0} · ❤️ ${site.likes || 0}</span>
         </div>
-        <div class="collection-list">
-          ${mySites.length === 0 ? '<div class="empty-message">You haven`t added any sites yet</div>' : ''}
-          ${mySites.map(site => `
-            <div class="collection-item">
-              <img src="${site.image || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(site.url)}&sz=48`}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 fill=%22%23ddd%22/%3E%3Ctext x=%2250%22 y=%2250%22 dy=%22.3em%22%3E${site.title?.charAt(0)||'?'}%3C/text%3E%3C/svg%3E'">
-              <div class="collection-info">
-                <h4>${escapeHtml(site.title) || 'No name'}</h4>
-                <a href="${escapeHtml(site.url)}" target="_blank">${truncateUrl(site.url)}</a>
-              </div>
-              <span>👀 ${site.views || 0} · ❤️ ${site.likes || 0}</span>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
+      `).join('')}
+    </div>
+  `;
+}
 
-    // Модалка добавления (с упрощённым таймером 5 мин)
     const modalOverlay = document.getElementById('modalOverlay');
     const cancelBtn = document.getElementById('cancelBtn');
     const saveBtn = document.getElementById('saveBtn');
@@ -772,9 +781,7 @@
       }
       modalOverlay.style.display = 'flex';
     });
-    
     cancelBtn.addEventListener('click', () => modalOverlay.style.display = 'none');
-    
     fetchMetaBtn.addEventListener('click', async () => {
       const url = urlInput.value.trim();
       if (!url) return alert('Enter link');
@@ -798,11 +805,9 @@
         modalOverlay.style.display = 'none';
         return;
       }
-
       const url = urlInput.value.trim();
       if (!url) return alert('Enter link');
       try { new URL(url); } catch { return alert('Invalid URL'); }
-      
       const newSite = {
         user_id: currentUserId,
         url, title: titleInput.value.trim() || 'No name',
@@ -811,7 +816,6 @@
         tags: tagsInput.value.trim().split(',').map(t=>t.trim()).filter(t=>t),
         views:0, likes:0, skips:0
       };
-      
       const { data, error } = await supabase.from('sites').insert([newSite]).select();
       if (error) return alert('Error: '+error.message);
       if (data) {
@@ -824,7 +828,6 @@
       modalOverlay.style.display = 'none';
     });
 
-    // Тёмная тема
     function setTheme(dark) {
       document.body.classList.toggle('dark', dark);
       themeToggle.textContent = dark ? '☀️' : '🌙';
@@ -841,7 +844,6 @@
       else renderProfile();
     }
 
-    // Инициализация
     (async () => {
       await loadSitesFromDB();
       switchTab('discover');
