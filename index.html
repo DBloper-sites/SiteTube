@@ -450,7 +450,70 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
 
-    // Профили пользователей (локальное хранилище)
+    // Глобальные подписки (хранятся как объект { [userId]: { followers: Set, following: Set } })
+    const GLOBAL_FOLLOWS_KEY = 'global_follows';
+    function loadGlobalFollows() {
+      const saved = localStorage.getItem(GLOBAL_FOLLOWS_KEY);
+      if (!saved) return {};
+      const parsed = JSON.parse(saved);
+      // Восстановление Set'ов
+      for (const uid in parsed) {
+        parsed[uid].followers = new Set(parsed[uid].followers || []);
+        parsed[uid].following = new Set(parsed[uid].following || []);
+      }
+      return parsed;
+    }
+    function saveGlobalFollows(follows) {
+      const serialized = {};
+      for (const uid in follows) {
+        serialized[uid] = {
+          followers: [...(follows[uid].followers || [])],
+          following: [...(follows[uid].following || [])]
+        };
+      }
+      localStorage.setItem(GLOBAL_FOLLOWS_KEY, JSON.stringify(serialized));
+    }
+    let globalFollows = loadGlobalFollows();
+
+    function ensureUserEntry(userId) {
+      if (!globalFollows[userId]) {
+        globalFollows[userId] = { followers: new Set(), following: new Set() };
+      }
+    }
+
+    function isFollowing(followerId, targetId) {
+      ensureUserEntry(followerId);
+      return globalFollows[followerId].following.has(targetId);
+    }
+
+    function toggleFollow(followerId, targetId) {
+      if (followerId === targetId) return;
+      ensureUserEntry(followerId);
+      ensureUserEntry(targetId);
+      const followerEntry = globalFollows[followerId];
+      const targetEntry = globalFollows[targetId];
+      
+      if (followerEntry.following.has(targetId)) {
+        followerEntry.following.delete(targetId);
+        targetEntry.followers.delete(followerId);
+      } else {
+        followerEntry.following.add(targetId);
+        targetEntry.followers.add(followerId);
+      }
+      saveGlobalFollows(globalFollows);
+    }
+
+    function getFollowersCount(userId) {
+      ensureUserEntry(userId);
+      return globalFollows[userId].followers.size;
+    }
+
+    function getFollowingCount(userId) {
+      ensureUserEntry(userId);
+      return globalFollows[userId].following.size;
+    }
+
+    // Профили пользователей
     const PROFILES_KEY = 'user_profiles';
     function getAllProfiles() {
       const saved = localStorage.getItem(PROFILES_KEY);
@@ -466,25 +529,6 @@
       return profiles[userId] || { name: 'User', avatar: null };
     }
 
-    // Подписки
-    const FOLLOWS_KEY = 'user_follows';
-    function getFollowsSet() {
-      const saved = localStorage.getItem(FOLLOWS_KEY);
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    }
-    function saveFollowsSet(set) {
-      localStorage.setItem(FOLLOWS_KEY, JSON.stringify([...set]));
-    }
-    function isFollowing(userId) {
-      return getFollowsSet().has(userId);
-    }
-    function toggleFollow(userId) {
-      const set = getFollowsSet();
-      if (set.has(userId)) set.delete(userId);
-      else set.add(userId);
-      saveFollowsSet(set);
-    }
-
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
       if (!id) {
@@ -494,6 +538,7 @@
       return id;
     }
     const currentUserId = getLocalUserId();
+    ensureUserEntry(currentUserId);
 
     let allSites = [];
     let shuffledQueue = [];
@@ -501,7 +546,7 @@
     let activeFilterTag = null;
     let currentTab = 'discover';
     let searchQuery = '';
-    let viewingUserId = currentUserId; // для профиля (чужой или свой)
+    let viewingUserId = currentUserId;
 
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
@@ -633,7 +678,8 @@
       const profile = getProfile(authorId);
       const avatarHtml = profile.avatar ? `<img src="${profile.avatar}">` : (profile.name || '?').charAt(0).toUpperCase();
       const isOwn = authorId === currentUserId;
-      const following = isOwn ? false : isFollowing(authorId);
+      const following = isOwn ? false : isFollowing(currentUserId, authorId);
+      const followersCount = getFollowersCount(authorId);
       
       return `
         <div class="author-row">
@@ -642,7 +688,7 @@
           </div>
           <div class="author-info" data-user-id="${authorId}">
             <div class="author-name">${escapeHtml(profile.name) || 'User'}</div>
-            <div class="author-stats">👀 ${site.views||0} · ❤️ ${site.likes||0}</div>
+            <div class="author-stats">👥 ${followersCount} followers</div>
           </div>
           ${!isOwn ? `
             <button class="follow-btn ${following ? 'following' : ''}" data-user-id="${authorId}">
@@ -690,16 +736,16 @@
         </div>
       `;
       
-      // Обработчики кликов по автору
       cardEl.querySelectorAll('[data-user-id]').forEach(el => {
         el.addEventListener('click', (e) => {
           e.stopPropagation();
           const uid = el.dataset.userId;
           if (el.classList.contains('follow-btn')) {
-            toggleFollow(uid);
-            renderCurrentCard(); // обновить кнопку
+            toggleFollow(currentUserId, uid);
+            renderCurrentCard();
+            if (currentTab === 'profile') renderProfile();
+            if (currentTab === 'analytics') renderAnalytics();
           } else {
-            // Переход на профиль пользователя
             viewingUserId = uid;
             switchTab('profile');
           }
@@ -819,8 +865,7 @@
       else if (tabId==='liked') renderLikedList();
       else if (tabId==='profile') {
         if (viewingUserId !== currentUserId) {
-          // Возвращаем просмотр своего профиля при переключении вкладки
-          viewingUserId = currentUserId;
+          // остаётся просмотр чужого профиля
         }
         renderProfile();
       }
@@ -851,8 +896,9 @@
       const profile = getProfile(viewingUserId);
       const userSites = allSites.filter(s => s.user_id === viewingUserId);
       const totalLikes = userSites.reduce((sum, s) => sum + (s.likes || 0), 0);
-      const followersCount = 0; // можем посчитать из всех профилей
-      const following = isOwnProfile ? false : isFollowing(viewingUserId);
+      const followersCount = getFollowersCount(viewingUserId);
+      const followingCount = getFollowingCount(viewingUserId);
+      const following = isOwnProfile ? false : isFollowing(currentUserId, viewingUserId);
       
       profileContent.innerHTML = `
         <div class="profile-header">
@@ -861,7 +907,7 @@
           </div>
           <div>
             <h3>${escapeHtml(profile.name) || 'User'}</h3>
-            <p>📬 ${userSites.length} sites · ❤️ ${totalLikes} likes</p>
+            <p>📬 ${userSites.length} sites · 👥 ${followersCount} followers · 👤 ${followingCount} following</p>
           </div>
           ${isOwnProfile ? `
             <button class="profile-edit-btn" id="editProfileBtn">✏️</button>
@@ -887,10 +933,10 @@
       `;
       
       if (isOwnProfile) {
-        document.getElementById('editProfileBtn').addEventListener('click', openProfileModal);
+        document.getElementById('editProfileBtn')?.addEventListener('click', openProfileModal);
       } else {
-        document.getElementById('profileFollowBtn').addEventListener('click', () => {
-          toggleFollow(viewingUserId);
+        document.getElementById('profileFollowBtn')?.addEventListener('click', () => {
+          toggleFollow(currentUserId, viewingUserId);
           renderProfile();
         });
       }
@@ -901,6 +947,8 @@
       const mySites = allSites.filter(s => s.user_id === currentUserId);
       const totalViews = mySites.reduce((sum, s) => sum + (s.views || 0), 0);
       const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
+      const followersCount = getFollowersCount(currentUserId);
+      const followingCount = getFollowingCount(currentUserId);
       
       const sitesByDate = {};
       mySites.forEach(site => {
@@ -913,7 +961,10 @@
       
       analyticsContent.innerHTML = `
         <div class="profile-header">
-          <div>📊 Total views: ${totalViews} · ❤️ Total likes: ${totalLikes}</div>
+          <div>
+            <div>📊 Total views: ${totalViews} · ❤️ Total likes: ${totalLikes}</div>
+            <div style="margin-top:8px;">👥 ${followersCount} followers · 👤 ${followingCount} following</div>
+          </div>
         </div>
         <div class="analytics-chart-container">
           <canvas id="analyticsChart" width="400" height="200"></canvas>
