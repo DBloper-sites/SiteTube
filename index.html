@@ -460,77 +460,26 @@
   (function(){
     "use strict";
 
-    // ========== ВАШИ КЛЮЧИ SUPABASE ==========
+    // ========== КОНФИГУРАЦИЯ SUPABASE ==========
     const SUPABASE_URL = 'https://vkdaybztuugryugmbhku.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_G4gFPU_saTc6GL5lCEEOXg_fbvLAUDp';
-    // ========================================
+    // ==========================================
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
 
-    // ---------- Упрощённые подписки (массивы) ----------
-    const GLOBAL_FOLLOWS_KEY = 'global_follows_v2';
-    function loadGlobalFollows() {
-      const saved = localStorage.getItem(GLOBAL_FOLLOWS_KEY);
-      const defaults = {};
-      return saved ? JSON.parse(saved) : defaults;
-    }
-    function saveGlobalFollows(follows) {
-      localStorage.setItem(GLOBAL_FOLLOWS_KEY, JSON.stringify(follows));
-    }
-    let globalFollows = loadGlobalFollows();
-
-    function ensureUserEntry(userId) {
-      if (!globalFollows[userId]) {
-        globalFollows[userId] = { followers: [], following: [] };
-      }
-    }
-    function isFollowing(followerId, targetId) {
-      ensureUserEntry(followerId);
-      return globalFollows[followerId].following.includes(targetId);
-    }
-    function toggleFollow(followerId, targetId) {
-      if (followerId === targetId) return;
-      ensureUserEntry(followerId);
-      ensureUserEntry(targetId);
-      const followerEntry = globalFollows[followerId];
-      const targetEntry = globalFollows[targetId];
-      
-      const index = followerEntry.following.indexOf(targetId);
-      if (index !== -1) {
-        followerEntry.following.splice(index, 1);
-        const targetIndex = targetEntry.followers.indexOf(followerId);
-        if (targetIndex !== -1) targetEntry.followers.splice(targetIndex, 1);
-      } else {
-        followerEntry.following.push(targetId);
-        targetEntry.followers.push(followerId);
-      }
-      saveGlobalFollows(globalFollows);
-    }
-    function getFollowersCount(userId) {
-      ensureUserEntry(userId);
-      return globalFollows[userId].followers.length;
-    }
-    function getFollowingCount(userId) {
-      ensureUserEntry(userId);
-      return globalFollows[userId].following.length;
-    }
-
-    // ---------- Профили ----------
-    const PROFILES_KEY = 'user_profiles';
-    function getAllProfiles() {
-      const saved = localStorage.getItem(PROFILES_KEY);
-      return saved ? JSON.parse(saved) : {};
-    }
-    function saveProfile(userId, profile) {
-      const profiles = getAllProfiles();
-      profiles[userId] = profile;
-      localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-    }
-    function getProfile(userId) {
-      const profiles = getAllProfiles();
-      return profiles[userId] || { name: 'User', avatar: null };
-    }
+    // ---------- Глобальное состояние ----------
+    let allSites = [];
+    let shuffledQueue = [];
+    let currentIndex = 0;
+    let activeFilterTag = null;
+    let currentTab = 'discover';
+    let searchQuery = '';
+    let viewingUserId = null; // null означает "свой профиль"
+    
+    // Кэш профилей и подписок для быстрого доступа
+    let profilesCache = {};
+    let followsCache = { followers: {}, following: {} }; // userId -> { followers: [], following: [] }
 
     // ---------- Локальный ID ----------
     function getLocalUserId() {
@@ -542,17 +491,81 @@
       return id;
     }
     const currentUserId = getLocalUserId();
-    ensureUserEntry(currentUserId);
+    viewingUserId = currentUserId;
 
-    // ---------- Состояние ----------
-    let allSites = [];
-    let shuffledQueue = [];
-    let currentIndex = 0;
-    let activeFilterTag = null;
-    let currentTab = 'discover';
-    let searchQuery = '';
-    let viewingUserId = currentUserId;
+    // ---------- Загрузка профилей из Supabase ----------
+    async function loadProfiles() {
+      const { data, error } = await supabase.from('profiles').select('*');
+      if (error) { console.error('Profiles error:', error); return; }
+      profilesCache = {};
+      data.forEach(p => { profilesCache[p.user_id] = p; });
+    }
 
+    async function getProfile(userId) {
+      if (!profilesCache[userId]) {
+        const { data } = await supabase.from('profiles').select('*').eq('user_id', userId).single();
+        if (data) profilesCache[userId] = data;
+        else profilesCache[userId] = { user_id: userId, name: 'User', avatar: null };
+      }
+      return profilesCache[userId];
+    }
+
+    async function saveProfile(userId, profileData) {
+      const { error } = await supabase.from('profiles').upsert({
+        user_id: userId,
+        name: profileData.name,
+        avatar: profileData.avatar
+      });
+      if (!error) {
+        profilesCache[userId] = { user_id: userId, ...profileData };
+      }
+    }
+
+    // ---------- Подписки ----------
+    async function loadFollows() {
+      const { data, error } = await supabase.from('follows').select('*');
+      if (error) { console.error('Follows error:', error); return; }
+      
+      followsCache = { followers: {}, following: {} };
+      data.forEach(f => {
+        if (!followsCache.followers[f.following_id]) followsCache.followers[f.following_id] = [];
+        if (!followsCache.following[f.follower_id]) followsCache.following[f.follower_id] = [];
+        followsCache.followers[f.following_id].push(f.follower_id);
+        followsCache.following[f.follower_id].push(f.following_id);
+      });
+    }
+
+    function isFollowing(followerId, targetId) {
+      return followsCache.following[followerId]?.includes(targetId) || false;
+    }
+
+    function getFollowersCount(userId) {
+      return followsCache.followers[userId]?.length || 0;
+    }
+
+    function getFollowingCount(userId) {
+      return followsCache.following[userId]?.length || 0;
+    }
+
+    async function toggleFollow(followerId, targetId) {
+      if (followerId === targetId) return;
+      const following = isFollowing(followerId, targetId);
+      
+      if (following) {
+        await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', targetId);
+        // Обновить кэш
+        followsCache.following[followerId] = followsCache.following[followerId].filter(id => id !== targetId);
+        followsCache.followers[targetId] = followsCache.followers[targetId].filter(id => id !== followerId);
+      } else {
+        await supabase.from('follows').insert({ follower_id: followerId, following_id: targetId });
+        if (!followsCache.following[followerId]) followsCache.following[followerId] = [];
+        if (!followsCache.followers[targetId]) followsCache.followers[targetId] = [];
+        followsCache.following[followerId].push(targetId);
+        followsCache.followers[targetId].push(followerId);
+      }
+    }
+
+    // ---------- Локальные данные (просмотры, лайки) ----------
     const STORAGE_VIEWED = 'sitefeed_viewed';
     const STORAGE_LIKED = 'sitefeed_liked';
     const STORAGE_LAST_PUBLISH = 'last_publish_time';
@@ -564,6 +577,7 @@
     function getLastPublishTime() { return parseInt(localStorage.getItem(STORAGE_LAST_PUBLISH) || '0'); }
     function setLastPublishTime(ts) { localStorage.setItem(STORAGE_LAST_PUBLISH, ts); }
 
+    // ---------- DOM элементы ----------
     const cardEl = document.getElementById('currentCard');
     const skipBtn = document.getElementById('skipBtn');
     const likeBtn = document.getElementById('likeBtn');
@@ -580,6 +594,7 @@
     const searchBox = document.getElementById('searchBox');
     const searchInput = document.getElementById('searchInput');
 
+    // ---------- Вспомогательные ----------
     function escapeHtml(text) {
       if (!text) return '';
       const div = document.createElement('div');
@@ -678,9 +693,9 @@
       statsSubtitle.textContent = `📊 ${total} sites · ❤️ ${likedCount} likes`;
     }
 
-    function renderAuthorRow(site) {
+    async function renderAuthorRow(site) {
       const authorId = site.user_id;
-      const profile = getProfile(authorId);
+      const profile = await getProfile(authorId);
       const avatarHtml = profile.avatar ? `<img src="${profile.avatar}">` : (profile.name || '?').charAt(0).toUpperCase();
       const isOwn = authorId === currentUserId;
       const following = isOwn ? false : isFollowing(currentUserId, authorId);
@@ -704,7 +719,7 @@
       `;
     }
 
-    function renderCurrentCard() {
+    async function renderCurrentCard() {
       const site = getCurrentSite();
       if (!site) {
         let msg = '😕 No sites found';
@@ -728,7 +743,7 @@
           <img src="${imageUrl}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
           <span style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#e0e0e0; color:#666; font-weight:bold; font-size:48px;">${escapeHtml(site.title?.charAt(0) || '?')}</span>
         </div>
-        ${renderAuthorRow(site)}
+        ${await renderAuthorRow(site)}
         <div class="site-title">
           <h3>${escapeHtml(site.title) || 'No name'}</h3>
           <a href="${escapeHtml(site.url)}" target="_blank">${escapeHtml(truncateUrl(site.url))}</a>
@@ -742,12 +757,13 @@
       `;
       
       cardEl.querySelectorAll('[data-user-id]').forEach(el => {
-        el.addEventListener('click', (e) => {
+        el.addEventListener('click', async (e) => {
           e.stopPropagation();
           const uid = el.dataset.userId;
           if (el.classList.contains('follow-btn')) {
-            toggleFollow(currentUserId, uid);
-            // Обновить все активные вкладки
+            await toggleFollow(currentUserId, uid);
+            // Обновить кэш и перерисовать
+            await loadFollows();
             if (currentTab === 'discover') renderCurrentCard();
             if (currentTab === 'profile') renderProfile();
             if (currentTab === 'analytics') renderAnalytics();
@@ -817,6 +833,7 @@
       setTimeout(() => heart.remove(), 400);
     }
 
+    // Свайпы
     let startX=0, startY=0, currentX=0, currentY=0, isDragging=false;
     cardEl.addEventListener('touchstart', (e) => {
       if (!getCurrentSite()) return;
@@ -892,9 +909,9 @@
       `).join('');
     }
 
-    function renderProfile() {
+    async function renderProfile() {
       const isOwnProfile = viewingUserId === currentUserId;
-      const profile = getProfile(viewingUserId);
+      const profile = await getProfile(viewingUserId);
       const userSites = allSites.filter(s => s.user_id === viewingUserId);
       const totalLikes = userSites.reduce((sum, s) => sum + (s.likes || 0), 0);
       const followersCount = getFollowersCount(viewingUserId);
@@ -954,15 +971,16 @@
           });
         });
       } else {
-        document.getElementById('profileFollowBtn')?.addEventListener('click', () => {
-          toggleFollow(currentUserId, viewingUserId);
+        document.getElementById('profileFollowBtn')?.addEventListener('click', async () => {
+          await toggleFollow(currentUserId, viewingUserId);
+          await loadFollows();
           renderProfile();
         });
       }
     }
 
     let chartInstance = null;
-    function renderAnalytics() {
+    async function renderAnalytics() {
       const mySites = allSites.filter(s => s.user_id === currentUserId);
       const totalViews = mySites.reduce((sum, s) => sum + (s.views || 0), 0);
       const totalLikes = mySites.reduce((sum, s) => sum + (s.likes || 0), 0);
@@ -1025,8 +1043,8 @@
     const profileCancelBtn = document.getElementById('profileCancelBtn');
     const profileSaveBtn = document.getElementById('profileSaveBtn');
 
-    function openProfileModal() {
-      const profile = getProfile(currentUserId);
+    async function openProfileModal() {
+      const profile = await getProfile(currentUserId);
       profileNameInput.value = profile.name || '';
       if (profile.avatar) avatarPreview.src = profile.avatar;
       else avatarPreview.src = '';
@@ -1041,12 +1059,12 @@
       }
     });
     profileCancelBtn.addEventListener('click', () => profileModalOverlay.style.display = 'none');
-    profileSaveBtn.addEventListener('click', () => {
+    profileSaveBtn.addEventListener('click', async () => {
       const newProfile = {
         name: profileNameInput.value.trim() || 'You',
         avatar: avatarPreview.src || null
       };
-      saveProfile(currentUserId, newProfile);
+      await saveProfile(currentUserId, newProfile);
       profileModalOverlay.style.display = 'none';
       
       if (currentTab === 'discover') renderCurrentCard();
@@ -1148,7 +1166,10 @@
       else if (currentTab==='analytics') renderAnalytics();
     }
 
+    // Инициализация
     (async () => {
+      await loadProfiles();
+      await loadFollows();
       await loadSitesFromDB();
       switchTab('discover');
     })();
