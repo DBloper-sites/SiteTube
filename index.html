@@ -468,38 +468,26 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const popSound = document.getElementById('popSound');
 
-    // Глобальные подписки
-    const GLOBAL_FOLLOWS_KEY = 'global_follows';
+    // ---------- Упрощённые подписки (массивы) ----------
+    const GLOBAL_FOLLOWS_KEY = 'global_follows_v2';
     function loadGlobalFollows() {
       const saved = localStorage.getItem(GLOBAL_FOLLOWS_KEY);
-      if (!saved) return {};
-      const parsed = JSON.parse(saved);
-      for (const uid in parsed) {
-        parsed[uid].followers = new Set(parsed[uid].followers || []);
-        parsed[uid].following = new Set(parsed[uid].following || []);
-      }
-      return parsed;
+      const defaults = {};
+      return saved ? JSON.parse(saved) : defaults;
     }
     function saveGlobalFollows(follows) {
-      const serialized = {};
-      for (const uid in follows) {
-        serialized[uid] = {
-          followers: [...(follows[uid].followers || [])],
-          following: [...(follows[uid].following || [])]
-        };
-      }
-      localStorage.setItem(GLOBAL_FOLLOWS_KEY, JSON.stringify(serialized));
+      localStorage.setItem(GLOBAL_FOLLOWS_KEY, JSON.stringify(follows));
     }
     let globalFollows = loadGlobalFollows();
 
     function ensureUserEntry(userId) {
       if (!globalFollows[userId]) {
-        globalFollows[userId] = { followers: new Set(), following: new Set() };
+        globalFollows[userId] = { followers: [], following: [] };
       }
     }
     function isFollowing(followerId, targetId) {
       ensureUserEntry(followerId);
-      return globalFollows[followerId].following.has(targetId);
+      return globalFollows[followerId].following.includes(targetId);
     }
     function toggleFollow(followerId, targetId) {
       if (followerId === targetId) return;
@@ -508,25 +496,27 @@
       const followerEntry = globalFollows[followerId];
       const targetEntry = globalFollows[targetId];
       
-      if (followerEntry.following.has(targetId)) {
-        followerEntry.following.delete(targetId);
-        targetEntry.followers.delete(followerId);
+      const index = followerEntry.following.indexOf(targetId);
+      if (index !== -1) {
+        followerEntry.following.splice(index, 1);
+        const targetIndex = targetEntry.followers.indexOf(followerId);
+        if (targetIndex !== -1) targetEntry.followers.splice(targetIndex, 1);
       } else {
-        followerEntry.following.add(targetId);
-        targetEntry.followers.add(followerId);
+        followerEntry.following.push(targetId);
+        targetEntry.followers.push(followerId);
       }
       saveGlobalFollows(globalFollows);
     }
     function getFollowersCount(userId) {
       ensureUserEntry(userId);
-      return globalFollows[userId].followers.size;
+      return globalFollows[userId].followers.length;
     }
     function getFollowingCount(userId) {
       ensureUserEntry(userId);
-      return globalFollows[userId].following.size;
+      return globalFollows[userId].following.length;
     }
 
-    // Профили
+    // ---------- Профили ----------
     const PROFILES_KEY = 'user_profiles';
     function getAllProfiles() {
       const saved = localStorage.getItem(PROFILES_KEY);
@@ -542,6 +532,7 @@
       return profiles[userId] || { name: 'User', avatar: null };
     }
 
+    // ---------- Локальный ID ----------
     function getLocalUserId() {
       let id = localStorage.getItem('local_user_id');
       if (!id) {
@@ -553,6 +544,7 @@
     const currentUserId = getLocalUserId();
     ensureUserEntry(currentUserId);
 
+    // ---------- Состояние ----------
     let allSites = [];
     let shuffledQueue = [];
     let currentIndex = 0;
@@ -755,7 +747,8 @@
           const uid = el.dataset.userId;
           if (el.classList.contains('follow-btn')) {
             toggleFollow(currentUserId, uid);
-            renderCurrentCard();
+            // Обновить все активные вкладки
+            if (currentTab === 'discover') renderCurrentCard();
             if (currentTab === 'profile') renderProfile();
             if (currentTab === 'analytics') renderAnalytics();
           } else {
